@@ -1,0 +1,63 @@
+version: 2
+
+project_name: ccsm
+
+before:
+  hooks:
+    - go mod tidy
+    - go test ./...
+
+builds:
+  - id: ccsm
+    main: ./cmd/ccsm
+    binary: ccsm
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+    goos:
+      - linux
+      - darwin
+      - freebsd
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: freebsd
+        goarch: arm64
+      - goos: windows
+        goarch: arm64
+
+archives:
+  - id: default
+    format: tar.gz
+    name_template: "{{ .ProjectName }}-{{ .Version }}-{{ .Os }}-{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - CLAUDE.md
+      - LICENSE*
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - "Merge pull request"
+
+release:
+  github:
+    owner: mattlab76
+    name: ccsm-go
+  draft: false
+  prerelease: auto
+  name_template: "v{{ .Version }}"
