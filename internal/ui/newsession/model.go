@@ -35,6 +35,7 @@ const (
 	stepDirConfirm
 	stepDirInput
 	stepDirCreate
+	stepAlreadyRunning
 	stepLaunching
 	stepSaveConfirm
 	stepSaveSubjectConfirm
@@ -78,6 +79,15 @@ func New(database *db.DB) Model {
 		db:        database,
 		step:      stepSubject,
 		targetDir: cwd,
+	}
+}
+
+// NewAlreadyRunning creates a model that shows the "already running" warning.
+func NewAlreadyRunning(database *db.DB, dir string) Model {
+	return Model{
+		db:        database,
+		step:      stepAlreadyRunning,
+		targetDir: dir,
 	}
 }
 
@@ -139,6 +149,16 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m.handleDirInput(key, msg)
 	case stepDirCreate:
 		return m.handleDirCreate(key)
+	case stepAlreadyRunning:
+		switch strings.ToLower(key) {
+		case "d":
+			// Change directory — go to dir input.
+			m.step = stepDirInput
+			m.input = ""
+		case "q", "esc":
+			return m, switchView(0)
+		}
+		return m, nil
 	case stepSaveConfirm:
 		return m.handleSaveConfirm(key)
 	case stepSaveSubjectConfirm:
@@ -247,8 +267,17 @@ func (m Model) handleDirCreate(key string) (Model, tea.Cmd) {
 }
 
 func (m Model) launchClaude() (Model, tea.Cmd) {
+	// Check if claude is already running in this directory.
+	if claude.IsClaudeRunningInDir(m.targetDir) {
+		m.step = stepAlreadyRunning
+		return m, nil
+	}
+
 	m.step = stepLaunching
 	m.message = ""
+
+	// Create lock file before starting claude.
+	claude.CreateSessionLock(m.targetDir, os.Getpid())
 
 	// Log the new session action.
 	subject := m.presetSubject
@@ -261,8 +290,8 @@ func (m Model) launchClaude() (Model, tea.Cmd) {
 }
 
 func (m Model) handleSessionFinished(msg claude.SessionFinishedMsg) (Model, tea.Cmd) {
-	// Try to read hook data.
-	hookData, err := hook.FindLatestSessionData()
+	// Try to read hook data — prefer matching by directory.
+	hookData, err := hook.FindSessionDataForDir(m.targetDir)
 	if err != nil {
 		m.message = i18n.T("save_no_data")
 		m.step = stepDone
@@ -480,6 +509,13 @@ func (m Model) View() string {
 		b.WriteString("  " + styles.Amber.Render(i18n.T("new_dir_not_found")) + "\n")
 		b.WriteString("  " + m.targetDir + "\n")
 		b.WriteString("  [" + i18n.ConfirmPrompt() + "] ")
+
+	case stepAlreadyRunning:
+		b.WriteString("  " + styles.Red.Render(i18n.T("already_running_title")) + "\n\n")
+		b.WriteString("  " + i18n.T("already_running_dir") + ": " + styles.Teal.Render(m.targetDir) + "\n\n")
+		b.WriteString("  " + i18n.T("already_running_hint") + "\n\n")
+		b.WriteString("  " + styles.Green.Render("[d]") + " " + i18n.T("already_running_change_dir") + "\n")
+		b.WriteString("  " + styles.Green.Render("[q]") + " " + i18n.T("menu_quit") + "\n")
 
 	case stepLaunching:
 		b.WriteString("  " + i18n.T("msg_starting") + "\n")

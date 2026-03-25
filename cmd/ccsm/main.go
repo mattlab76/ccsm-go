@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/mattlab76/ccsm-go/internal/app"
+	"github.com/mattlab76/ccsm-go/internal/claude"
 	"github.com/mattlab76/ccsm-go/internal/db"
 	"github.com/mattlab76/ccsm-go/internal/i18n"
 	"github.com/mattlab76/ccsm-go/internal/model"
@@ -63,6 +64,9 @@ func runTUI() {
 
 	loadLang(database)
 
+	// Startup housekeeping: clean up stale lock files.
+	claude.CleanupStaleLocks()
+
 	// Startup housekeeping: rotate activity log.
 	if settings, err := db.GetSettings(database); err == nil && settings.LogDays > 0 {
 		db.RotateLog(database, settings.LogDays)
@@ -90,13 +94,19 @@ func searchCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "search [query]",
 		Short: i18n.T("search_title"),
-		Args:  cobra.ExactArgs(1),
+		Args:  cobra.MaximumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			database := openDB()
 			defer database.Close()
 			loadLang(database)
 
-			sessions, err := db.SearchSessions(database, args[0])
+			var sessions []model.Session
+			var err error
+			if len(args) == 0 {
+				sessions, err = db.ListSessions(database, 0)
+			} else {
+				sessions, err = db.SearchSessions(database, args[0])
+			}
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 				os.Exit(1)

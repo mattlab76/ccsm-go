@@ -55,6 +55,40 @@ func ReadSessionData(sid string) (*HookData, error) {
 	return &h, nil
 }
 
+// FindSessionDataForDir finds the most recent temp file matching the given working directory.
+// Falls back to FindLatestSessionData if no match is found.
+func FindSessionDataForDir(dir string) (*HookData, error) {
+	entries, err := os.ReadDir(tmpDir)
+	if err != nil {
+		return FindLatestSessionData()
+	}
+
+	var best *HookData
+	var bestTime time.Time
+	for _, e := range entries {
+		if !strings.HasPrefix(e.Name(), "session-") || !strings.HasSuffix(e.Name(), ".json") {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		sid := strings.TrimPrefix(strings.TrimSuffix(e.Name(), ".json"), "session-")
+		h, err := ReadSessionData(sid)
+		if err != nil {
+			continue
+		}
+		if h.CWD == dir && (best == nil || info.ModTime().After(bestTime)) {
+			best = h
+			bestTime = info.ModTime()
+		}
+	}
+	if best != nil {
+		return best, nil
+	}
+	return FindLatestSessionData()
+}
+
 // FindLatestSessionData finds the most recently modified temp file.
 func FindLatestSessionData() (*HookData, error) {
 	entries, err := os.ReadDir(tmpDir)

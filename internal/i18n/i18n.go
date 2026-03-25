@@ -208,6 +208,12 @@ var langEN = map[string]string{
 	"header_in":      "In",
 	"header_out":     "Out",
 
+	// Already running
+	"already_running_title":      "⚠ Claude session already active!",
+	"already_running_dir":        "Directory",
+	"already_running_hint":       "A Claude session is already running in this directory. Please switch to that session or choose a different directory.",
+	"already_running_change_dir": "Change directory",
+
 	// General
 	"press_q": "Press q to return",
 }
@@ -340,6 +346,12 @@ var langDE = map[string]string{
 	"header_tokens":  "Tokens",
 	"header_in":      "In",
 	"header_out":     "Out",
+
+	// Already running
+	"already_running_title":      "⚠ Claude Session bereits aktiv!",
+	"already_running_dir":        "Verzeichnis",
+	"already_running_hint":       "In diesem Verzeichnis läuft bereits eine Claude Session. Bitte wechsle zu dieser Session oder wähle ein anderes Verzeichnis.",
+	"already_running_change_dir": "Verzeichnis wechseln",
 
 	// General
 	"press_q": "q drücken zum Zurückkehren",

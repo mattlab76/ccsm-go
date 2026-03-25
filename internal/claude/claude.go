@@ -15,19 +15,23 @@ type SessionFinishedMsg struct {
 }
 
 // StartSession returns a tea.Cmd that launches claude in the given directory.
+// Creates a lock file before starting and removes it when claude exits.
 func StartSession(dir string) tea.Cmd {
 	c := exec.Command("claude")
 	c.Dir = dir
 	return tea.ExecProcess(c, func(err error) tea.Msg {
+		RemoveSessionLock(dir)
 		return SessionFinishedMsg{Err: err}
 	})
 }
 
 // ResumeSession returns a tea.Cmd that launches claude --resume in the given directory.
+// Creates a lock file before starting and removes it when claude exits.
 func ResumeSession(sid, dir string) tea.Cmd {
 	c := exec.Command("claude", "--resume", sid)
 	c.Dir = dir
 	return tea.ExecProcess(c, func(err error) tea.Msg {
+		RemoveSessionLock(dir)
 		return SessionFinishedMsg{SessionID: sid, Err: err}
 	})
 }

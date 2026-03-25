@@ -1,7 +1,10 @@
 package app
 
 import (
+	"os"
+
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/mattlab76/ccsm-go/internal/claude"
 	"github.com/mattlab76/ccsm-go/internal/db"
 	"github.com/mattlab76/ccsm-go/internal/ui/browser"
 	"github.com/mattlab76/ccsm-go/internal/ui/delete"
@@ -170,9 +173,20 @@ func (m Model) handleChildSwitch(view ViewType) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) startResume(sid, cwd string) (tea.Model, tea.Cmd) {
+	// Check if claude is already running in this directory.
+	if claude.IsClaudeRunningInDir(cwd) {
+		m.currentView = ViewNewSession
+		m.newSession = newsession.NewAlreadyRunning(m.db, cwd)
+		m.newSession = m.newSession.SetSize(m.width, m.height)
+		return m, nil
+	}
+
 	m.currentView = ViewNewSession
 	m.newSession = newsession.NewForResume(m.db, sid)
 	m.newSession = m.newSession.SetSize(m.width, m.height)
+
+	// Create lock file before resuming.
+	claude.CreateSessionLock(cwd, os.Getpid())
 
 	if s, err := db.GetSession(m.db, sid); err == nil {
 		db.LogAction(m.db, "RESUME", s.Subject+" ("+cwd+")")
