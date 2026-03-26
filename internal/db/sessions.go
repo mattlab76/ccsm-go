@@ -1,6 +1,8 @@
 package db
 
 import (
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/mattlab76/ccsm-go/internal/model"
@@ -124,6 +126,43 @@ func MoveToEnd(db *DB, sid string) error {
 	_, err := db.Exec("UPDATE sessions SET created_at = ? WHERE sid = ?",
 		time.Now().Format("2006-01-02 15:04:05"), sid)
 	return err
+}
+
+// GetAllTags returns all unique tags across all sessions, sorted by frequency.
+func GetAllTags(db *DB) ([]string, error) {
+	rows, err := db.Query("SELECT tags FROM sessions WHERE tags != '' AND tags != '-'")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	counts := make(map[string]int)
+	for rows.Next() {
+		var tags string
+		if err := rows.Scan(&tags); err != nil {
+			continue
+		}
+		for _, tag := range strings.Fields(tags) {
+			counts[tag]++
+		}
+	}
+
+	// Sort by frequency (most used first).
+	type tagCount struct {
+		tag   string
+		count int
+	}
+	var sorted []tagCount
+	for tag, count := range counts {
+		sorted = append(sorted, tagCount{tag, count})
+	}
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].count > sorted[j].count })
+
+	result := make([]string, len(sorted))
+	for i, tc := range sorted {
+		result[i] = tc.tag
+	}
+	return result, nil
 }
 
 // CountSessions returns the total number of sessions.

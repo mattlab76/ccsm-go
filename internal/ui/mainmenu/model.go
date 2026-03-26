@@ -19,13 +19,18 @@ type Model struct {
 	rows     []components.TableRow
 	width    int
 	height   int
+	cursor   int // -1 = no session selected, 0-4 = session row
 	err      error
 }
 
 // New creates a new main menu model.
 func New(database *db.DB) Model {
-	m := Model{db: database, width: 100}
+	m := Model{db: database, width: 100, cursor: -1}
 	m.loadSessions()
+	if len(m.sessions) > 0 {
+		m.cursor = 0
+		m.updateSelection()
+	}
 	return m
 }
 
@@ -41,8 +46,14 @@ func (m *Model) loadSessions() {
 		m.rows[i] = components.TableRow{
 			Num:     i + 1,
 			Session: s,
-			Status:  components.StatusOK, // TODO: Phase 7 — validate sessions
+			Status:  components.StatusOK,
 		}
+	}
+}
+
+func (m *Model) updateSelection() {
+	for i := range m.rows {
+		m.rows[i].Selected = (i == m.cursor)
 	}
 }
 
@@ -75,6 +86,23 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			return m, switchView(viewLog)
 		case "c":
 			return m, switchView(viewSettings)
+		case "up", "k":
+			if m.cursor > 0 {
+				m.cursor--
+				m.updateSelection()
+			}
+		case "down", "j":
+			if m.cursor < len(m.sessions)-1 {
+				m.cursor++
+				m.updateSelection()
+			}
+		case "enter":
+			if m.cursor >= 0 && m.cursor < len(m.sessions) {
+				s := m.sessions[m.cursor]
+				return m, func() tea.Msg {
+					return ResumeSessionMsg{SID: s.SID, CWD: s.CWD}
+				}
+			}
 		case "1", "2", "3", "4", "5":
 			idx := int(msg.String()[0] - '1')
 			if idx < len(m.sessions) {
@@ -123,7 +151,6 @@ func (m Model) View() string {
 		b.WriteString("  " + styles.TealBold.Render(i18n.T("menu_recent")))
 		b.WriteString("\n\n")
 		table := components.RenderTable(m.rows, components.TableCompact, w)
-		// Indent each line
 		for _, line := range strings.Split(table, "\n") {
 			b.WriteString("  " + line + "\n")
 		}
@@ -157,7 +184,12 @@ func (m Model) View() string {
 		b.WriteString("\n  " + styles.Red.Render(fmt.Sprintf("Error: %v", m.err)))
 	}
 
+	// Hints
 	b.WriteString("\n")
+	if len(m.sessions) > 0 {
+		b.WriteString("  " + styles.Dim.Render("↑/↓ select session  Enter resume  or press key for action") + "\n")
+	}
+
 	return b.String()
 }
 

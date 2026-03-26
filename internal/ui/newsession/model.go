@@ -14,6 +14,7 @@ import (
 	"github.com/mattlab76/ccsm-go/internal/hook"
 	"github.com/mattlab76/ccsm-go/internal/i18n"
 	"github.com/mattlab76/ccsm-go/internal/model"
+	"github.com/mattlab76/ccsm-go/internal/ui/components"
 	"github.com/mattlab76/ccsm-go/internal/ui/styles"
 )
 
@@ -52,10 +53,11 @@ type Model struct {
 	height int
 
 	// Input state
-	input        string
+	input         string
 	presetSubject string
-	targetDir    string
-	cursorBlink  bool
+	targetDir     string
+	pathComplete  components.PathComplete
+	tagComplete   components.TagComplete
 
 	// Session data from hook
 	hookData    *hook.HookData
@@ -214,7 +216,36 @@ func (m Model) handleDirConfirm(key string) (Model, tea.Cmd) {
 
 func (m Model) handleDirInput(key string, msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch key {
+	case "tab":
+		if m.pathComplete.Active {
+			// Accept selected suggestion.
+			accepted := m.pathComplete.Accept()
+			if accepted != "" {
+				m.input = accepted
+			}
+		} else {
+			// Trigger completion.
+			m.pathComplete.Complete(m.input)
+		}
+		return m, nil
+	case "shift+tab", "up":
+		if m.pathComplete.Active {
+			m.pathComplete.Prev()
+			return m, nil
+		}
+	case "down":
+		if m.pathComplete.Active {
+			m.pathComplete.Next()
+			return m, nil
+		}
 	case "enter":
+		if m.pathComplete.Active {
+			accepted := m.pathComplete.Accept()
+			if accepted != "" {
+				m.input = accepted
+			}
+			return m, nil
+		}
 		path := strings.TrimSpace(m.input)
 		if path == "" || path == "q" {
 			return m, switchView(0)
@@ -227,23 +258,31 @@ func (m Model) handleDirInput(key string, msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.targetDir = path
 		if info, err := os.Stat(path); err == nil && info.IsDir() {
 			m.input = ""
+			m.pathComplete.Reset()
 			return m.launchClaude()
 		}
 		// Dir doesn't exist.
 		m.step = stepDirCreate
 		m.input = ""
+		m.pathComplete.Reset()
 	case "esc":
+		if m.pathComplete.Active {
+			m.pathComplete.Reset()
+			return m, nil
+		}
 		return m, switchView(0)
 	case "backspace":
 		if len(m.input) > 0 {
 			m.input = m.input[:len(m.input)-1]
 		}
+		m.pathComplete.Reset()
 	default:
 		if len(key) == 1 {
 			m.input += key
 		} else if key == "space" {
 			m.input += " "
 		}
+		m.pathComplete.Reset()
 	}
 	return m, nil
 }
@@ -400,22 +439,50 @@ func (m Model) handleSaveSubjectInput(key string, msg tea.KeyMsg) (Model, tea.Cm
 
 func (m Model) handleSaveTagsInput(key string, msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch key {
+	case "tab":
+		if m.tagComplete.Active {
+			m.input = m.tagComplete.Accept(m.input)
+		} else {
+			// Load known tags and trigger completion.
+			if m.tagComplete.KnownTags == nil {
+				tags, _ := db.GetAllTags(m.db)
+				m.tagComplete.KnownTags = tags
+			}
+			m.tagComplete.Complete(m.input)
+		}
+		return m, nil
+	case "shift+tab":
+		if m.tagComplete.Active {
+			m.tagComplete.Prev()
+			return m, nil
+		}
 	case "enter":
+		if m.tagComplete.Active {
+			m.input = m.tagComplete.Accept(m.input)
+			return m, nil
+		}
 		m.chosenTags = strings.TrimSpace(m.input)
+		m.tagComplete.Reset()
 		return m.doSave()
 	case "esc":
+		if m.tagComplete.Active {
+			m.tagComplete.Reset()
+			return m, nil
+		}
 		m.message = i18n.T("save_not_saved")
 		m.step = stepDone
 	case "backspace":
 		if len(m.input) > 0 {
 			m.input = m.input[:len(m.input)-1]
 		}
+		m.tagComplete.Reset()
 	default:
 		if len(key) == 1 {
 			m.input += key
 		} else if key == "space" {
 			m.input += " "
 		}
+		m.tagComplete.Reset()
 	}
 	return m, nil
 }
@@ -499,8 +566,11 @@ func (m Model) View() string {
 		b.WriteString("  " + i18n.T("new_dir_question") + " [" + i18n.ConfirmPrompt() + "] ")
 
 	case stepDirInput:
-		b.WriteString("  " + i18n.T("new_dir_enter_or_q") + "\n")
+		b.WriteString("  " + i18n.T("new_dir_enter_or_q") + " " + styles.Dim.Render("(Tab: autocomplete)") + "\n")
 		b.WriteString("  > " + m.input + "█\n")
+		if m.pathComplete.Active {
+			b.WriteString(m.pathComplete.View())
+		}
 		if m.err != nil {
 			b.WriteString("  " + styles.Red.Render(m.err.Error()) + "\n")
 		}
@@ -548,8 +618,11 @@ func (m Model) View() string {
 	case stepSaveTags:
 		b.WriteString(m.renderSaveBox())
 		b.WriteString("  Subject: " + styles.Violet.Render(m.chosenSubject) + "\n\n")
-		b.WriteString("  " + i18n.T("save_tags") + ":\n")
+		b.WriteString("  " + i18n.T("save_tags") + " " + styles.Dim.Render("(Tab: autocomplete)") + ":\n")
 		b.WriteString("  > " + m.input + "█\n")
+		if m.tagComplete.Active {
+			b.WriteString(m.tagComplete.View())
+		}
 
 	case stepDone:
 		if m.err != nil {

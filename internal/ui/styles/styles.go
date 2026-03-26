@@ -15,6 +15,14 @@ var (
 	// Combined styles.
 	TealBold   = lipgloss.NewStyle().Foreground(lipgloss.Color("36")).Bold(true)
 	VioletBold = lipgloss.NewStyle().Foreground(lipgloss.Color("99")).Bold(true)
+
+	// Selected row highlight: reverse video (white on violet).
+	SelectedRow = lipgloss.NewStyle().Background(lipgloss.Color("99")).Foreground(lipgloss.Color("255")).Bold(true)
+
+	// Status bar styles.
+	StatusBarStyle  = lipgloss.NewStyle().Background(lipgloss.Color("236")).Foreground(lipgloss.Color("252"))
+	StatusBarKey    = lipgloss.NewStyle().Background(lipgloss.Color("99")).Foreground(lipgloss.Color("255")).Bold(true)
+	StatusBarAction = lipgloss.NewStyle().Background(lipgloss.Color("236")).Foreground(lipgloss.Color("252"))
 )
 
 // Logo returns the ASCII art logo lines (without color).

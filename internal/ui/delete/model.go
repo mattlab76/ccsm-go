@@ -3,7 +3,6 @@ package delete
 import (
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -23,8 +22,8 @@ type SwitchViewMsg struct {
 type state int
 
 const (
-	stateSelect state = iota
-	stateConfirm
+	stateSelect  state = iota // Navigate + space to mark
+	stateConfirm              // Confirm deletion
 	stateDone
 )
 
@@ -36,14 +35,14 @@ type Model struct {
 	width    int
 	height   int
 	state    state
-	input    string
-	selected []int // 0-based indices
+	cursor   int            // 0-based cursor position
+	marked   map[int]bool   // marked for deletion (0-based indices)
 	message  string
 }
 
 // New creates a new delete model.
 func New(database *db.DB) Model {
-	m := Model{db: database, width: 100, state: stateSelect}
+	m := Model{db: database, width: 100, state: stateSelect, marked: make(map[int]bool)}
 	m.loadSessions()
 	return m
 }
@@ -68,6 +67,14 @@ func (m *Model) loadSessions() {
 			Session: s,
 			Status:  status,
 		}
+	}
+	m.cursor = 0
+	m.updateSelection()
+}
+
+func (m *Model) updateSelection() {
+	for i := range m.rows {
+		m.rows[i].Selected = (i == m.cursor)
 	}
 }
 
@@ -100,27 +107,36 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch m.state {
 	case stateSelect:
 		switch key {
+		case "up", "k":
+			if m.cursor > 0 {
+				m.cursor--
+				m.updateSelection()
+			}
+		case "down", "j":
+			if m.cursor < len(m.rows)-1 {
+				m.cursor++
+				m.updateSelection()
+			}
+		case " ": // Space toggles mark
+			if m.cursor >= 0 && m.cursor < len(m.sessions) {
+				if m.marked[m.cursor] {
+					delete(m.marked, m.cursor)
+				} else {
+					m.marked[m.cursor] = true
+				}
+			}
+		case "enter":
+			if len(m.marked) == 0 {
+				// If nothing marked, mark current cursor position.
+				if m.cursor >= 0 && m.cursor < len(m.sessions) {
+					m.marked[m.cursor] = true
+				}
+			}
+			if len(m.marked) > 0 {
+				m.state = stateConfirm
+			}
 		case "q", "esc":
 			return m, switchView(0)
-		case "enter":
-			indices := parseIndices(m.input, len(m.sessions))
-			m.input = ""
-			if len(indices) == 0 {
-				m.message = i18n.T("settings_invalid")
-				return m, nil
-			}
-			m.selected = indices
-			m.state = stateConfirm
-		case "backspace":
-			if len(m.input) > 0 {
-				m.input = m.input[:len(m.input)-1]
-			}
-		default:
-			if len(key) == 1 {
-				m.input += key
-			} else if key == "space" {
-				m.input += " "
-			}
 		}
 
 	case stateConfirm:
@@ -129,7 +145,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			return m.doDelete()
 		case "n", "q", "esc":
 			m.state = stateSelect
-			m.selected = nil
+			m.marked = make(map[int]bool)
 		}
 
 	case stateDone:
@@ -142,10 +158,12 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 func (m Model) doDelete() (Model, tea.Cmd) {
 	var sids []string
 	var names []string
-	for _, idx := range m.selected {
-		s := m.sessions[idx]
-		sids = append(sids, s.SID)
-		names = append(names, s.Subject)
+	for idx := range m.marked {
+		if idx < len(m.sessions) {
+			s := m.sessions[idx]
+			sids = append(sids, s.SID)
+			names = append(names, s.Subject)
+		}
 	}
 
 	if err := db.DeleteSessions(m.db, sids); err != nil {
@@ -188,7 +206,17 @@ func (m Model) View() string {
 		return b.String()
 	}
 
-	table := components.RenderTable(m.rows, components.TableFull, w)
+	// Render table with marked rows indicated.
+	displayRows := make([]components.TableRow, len(m.rows))
+	copy(displayRows, m.rows)
+	for i := range displayRows {
+		if m.marked[i] {
+			// Prefix subject with ✗ to show marked for deletion.
+			displayRows[i].Session.Subject = "✗ " + displayRows[i].Session.Subject
+		}
+	}
+
+	table := components.RenderTable(displayRows, components.TableFull, w)
 	for _, line := range strings.Split(table, "\n") {
 		b.WriteString("  " + line + "\n")
 	}
@@ -203,14 +231,18 @@ func (m Model) View() string {
 		if m.message != "" {
 			b.WriteString("  " + styles.Amber.Render(m.message) + "\n")
 		}
-		b.WriteString("  " + i18n.T("cleanup_select_prompt") + "\n")
-		b.WriteString("  > " + m.input + "█\n")
+		markedCount := len(m.marked)
+		if markedCount > 0 {
+			b.WriteString(fmt.Sprintf("  "+styles.Red.Render("%d marked for deletion")+"\n", markedCount))
+		}
+		b.WriteString("  " + styles.Dim.Render("↑/↓ navigate  Space mark  Enter delete marked  q back") + "\n")
 
 	case stateConfirm:
-		// Show what will be deleted.
-		for _, idx := range m.selected {
-			s := m.sessions[idx]
-			b.WriteString("  " + styles.Red.Render(fmt.Sprintf("  %d. %s", idx+1, s.Subject)) + "\n")
+		b.WriteString("  " + styles.Red.Render(fmt.Sprintf("Delete %d session(s)?", len(m.marked))) + "\n")
+		for idx := range m.marked {
+			if idx < len(m.sessions) {
+				b.WriteString("    " + styles.Red.Render("✗ "+m.sessions[idx].Subject) + "\n")
+			}
 		}
 		b.WriteString("\n  " + i18n.T("delete_confirm") + " [" + i18n.ConfirmPrompt() + "] ")
 
@@ -222,29 +254,6 @@ func (m Model) View() string {
 	}
 
 	return b.String()
-}
-
-// parseIndices parses "1,3,5" into 0-based indices, validating against max.
-func parseIndices(input string, max int) []int {
-	var result []int
-	seen := make(map[int]bool)
-	parts := strings.Split(input, ",")
-	for _, part := range parts {
-		part = strings.TrimSpace(part)
-		if part == "" {
-			continue
-		}
-		n, err := strconv.Atoi(part)
-		if err != nil || n < 1 || n > max {
-			continue
-		}
-		idx := n - 1
-		if !seen[idx] {
-			seen[idx] = true
-			result = append(result, idx)
-		}
-	}
-	return result
 }
 
 func switchView(v int) tea.Cmd {

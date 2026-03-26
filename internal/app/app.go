@@ -7,6 +7,7 @@ import (
 	"github.com/mattlab76/ccsm-go/internal/claude"
 	"github.com/mattlab76/ccsm-go/internal/db"
 	"github.com/mattlab76/ccsm-go/internal/ui/browser"
+	"github.com/mattlab76/ccsm-go/internal/ui/components"
 	"github.com/mattlab76/ccsm-go/internal/ui/delete"
 	uilog "github.com/mattlab76/ccsm-go/internal/ui/log"
 	"github.com/mattlab76/ccsm-go/internal/ui/mainmenu"
@@ -199,21 +200,32 @@ func (m Model) startResume(sid, cwd string) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) View() string {
+	var content string
+	var hints string
+
 	switch m.currentView {
 	case ViewMainMenu:
-		return m.mainMenu.View()
+		content = m.mainMenu.View()
+		hints = components.StatusBarItems("↑↓", "select", "Enter", "resume", "n", "new", "s", "browse", "q", "quit")
 	case ViewNewSession:
-		return m.newSession.View()
+		content = m.newSession.View()
+		hints = components.StatusBarItems("Enter", "confirm", "Esc", "cancel")
 	case ViewBrowser:
-		return m.browser.View()
+		content = m.browser.View()
+		hints = components.StatusBarItems("↑↓", "navigate", "Enter", "resume", "/", "search", "q", "back")
 	case ViewDelete:
-		return m.deleteView.View()
+		content = m.deleteView.View()
+		hints = components.StatusBarItems("↑↓", "navigate", "Space", "mark", "Enter", "delete", "q", "back")
 	case ViewStats:
-		return m.statsView.View()
+		content = m.statsView.View()
+		hints = components.StatusBarItems("↑↓", "scroll", "q", "back")
 	case ViewLog:
-		return m.logView.View()
+		content = m.logView.View()
+		hints = components.StatusBarItems("↑↓", "scroll", "q", "back")
 	case ViewSettings:
-		return m.settingsView.View()
+		content = m.settingsView.View()
+		hints = components.StatusBarItems("1-3", "edit", "q", "back")
 	}
-	return ""
+
+	return content + "\n" + components.StatusBar(hints, m.width)
 }

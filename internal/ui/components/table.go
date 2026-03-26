@@ -31,9 +31,10 @@ const (
 
 // TableRow holds data for a single table row.
 type TableRow struct {
-	Num     int
-	Session model.Session
-	Status  SessionStatus
+	Num      int
+	Session  model.Session
+	Status   SessionStatus
+	Selected bool // highlighted row (cursor position)
 }
 
 // columnWidths holds computed column widths.
@@ -196,12 +197,16 @@ func RenderTable(rows []TableRow, mode TableMode, termWidth int) string {
 				padLeft(lo+" ", w.lo))
 		}
 
-		// Apply row color for status
-		switch row.Status {
-		case StatusExpired:
-			line = styles.Red.Render(line)
-		case StatusMissingDir:
-			line = styles.Amber.Render(line)
+		// Apply row color for status or selection highlight.
+		if row.Selected {
+			line = styles.SelectedRow.Render(line)
+		} else {
+			switch row.Status {
+			case StatusExpired:
+				line = styles.Red.Render(line)
+			case StatusMissingDir:
+				line = styles.Amber.Render(line)
+			}
 		}
 
 		b.WriteString(line + "\n")
