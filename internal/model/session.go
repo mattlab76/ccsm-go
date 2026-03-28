@@ -2,7 +2,7 @@ package model
 
 import "time"
 
-const Version = "2.0.0"
+const Version = "2.0.1"
 
 // Session represents a Claude Code session.
 type Session struct {
