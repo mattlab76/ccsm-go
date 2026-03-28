@@ -53,7 +53,7 @@ type Model struct {
 	height int
 
 	// Input state
-	input         string
+	ti            components.TextInput
 	presetSubject string
 	targetDir     string
 	pathComplete  components.PathComplete
@@ -156,7 +156,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		case "d":
 			// Change directory — go to dir input.
 			m.step = stepDirInput
-			m.input = ""
+			m.ti.Reset()
 		case "q", "esc":
 			return m, switchView(0)
 		}
@@ -181,21 +181,13 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 func (m Model) handleSubjectInput(key string, msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch key {
 	case "enter":
-		m.presetSubject = strings.TrimSpace(m.input)
-		m.input = ""
+		m.presetSubject = strings.TrimSpace(m.ti.Value)
+		m.ti.Reset()
 		m.step = stepDirConfirm
 	case "esc":
 		return m, switchView(0)
-	case "backspace":
-		if len(m.input) > 0 {
-			m.input = m.input[:len(m.input)-1]
-		}
 	default:
-		if len(key) == 1 {
-			m.input += key
-		} else if key == "space" {
-			m.input += " "
-		}
+		m.ti.HandleKey(key)
 	}
 	return m, nil
 }
@@ -207,7 +199,7 @@ func (m Model) handleDirConfirm(key string) (Model, tea.Cmd) {
 		return m.launchClaude()
 	case "n":
 		m.step = stepDirInput
-		m.input = ""
+		m.ti.Reset()
 	case "q", "esc":
 		return m, switchView(0)
 	}
@@ -221,11 +213,11 @@ func (m Model) handleDirInput(key string, msg tea.KeyMsg) (Model, tea.Cmd) {
 			// Accept selected suggestion.
 			accepted := m.pathComplete.Accept()
 			if accepted != "" {
-				m.input = accepted
+				m.ti.SetValue(accepted)
 			}
 		} else {
 			// Trigger completion.
-			m.pathComplete.Complete(m.input)
+			m.pathComplete.Complete(m.ti.Value)
 		}
 		return m, nil
 	case "shift+tab", "up":
@@ -242,11 +234,11 @@ func (m Model) handleDirInput(key string, msg tea.KeyMsg) (Model, tea.Cmd) {
 		if m.pathComplete.Active {
 			accepted := m.pathComplete.Accept()
 			if accepted != "" {
-				m.input = accepted
+				m.ti.SetValue(accepted)
 			}
 			return m, nil
 		}
-		path := strings.TrimSpace(m.input)
+		path := strings.TrimSpace(m.ti.Value)
 		if path == "" || path == "q" {
 			return m, switchView(0)
 		}
@@ -257,13 +249,13 @@ func (m Model) handleDirInput(key string, msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		m.targetDir = path
 		if info, err := os.Stat(path); err == nil && info.IsDir() {
-			m.input = ""
+			m.ti.Reset()
 			m.pathComplete.Reset()
 			return m.launchClaude()
 		}
 		// Dir doesn't exist.
 		m.step = stepDirCreate
-		m.input = ""
+		m.ti.Reset()
 		m.pathComplete.Reset()
 	case "esc":
 		if m.pathComplete.Active {
@@ -271,17 +263,8 @@ func (m Model) handleDirInput(key string, msg tea.KeyMsg) (Model, tea.Cmd) {
 			return m, nil
 		}
 		return m, switchView(0)
-	case "backspace":
-		if len(m.input) > 0 {
-			m.input = m.input[:len(m.input)-1]
-		}
-		m.pathComplete.Reset()
 	default:
-		if len(key) == 1 {
-			m.input += key
-		} else if key == "space" {
-			m.input += " "
-		}
+		m.ti.HandleKey(key)
 		m.pathComplete.Reset()
 	}
 	return m, nil
@@ -293,14 +276,14 @@ func (m Model) handleDirCreate(key string) (Model, tea.Cmd) {
 		if err := os.MkdirAll(m.targetDir, 0755); err != nil {
 			m.err = err
 			m.step = stepDirInput
-			m.input = ""
+			m.ti.Reset()
 			return m, nil
 		}
 		m.message = i18n.T("new_dir_created")
 		return m.launchClaude()
 	case "n", "q", "esc":
 		m.step = stepDirInput
-		m.input = ""
+		m.ti.Reset()
 	}
 	return m, nil
 }
@@ -391,13 +374,13 @@ func (m Model) handleSaveSubjectConfirm(key string) (Model, tea.Cmd) {
 			return m.doSave()
 		}
 		m.step = stepSaveTags
-		m.input = ""
+		m.ti.Reset()
 	case "n":
 		m.step = stepSaveSubjectInput
 		if m.isUpdate && m.existingSession != nil {
-			m.input = m.existingSession.Subject
+			m.ti.SetValue(m.existingSession.Subject)
 		} else {
-			m.input = m.autoSubject
+			m.ti.SetValue(m.autoSubject)
 		}
 	case "q", "esc":
 		m.message = i18n.T("save_not_saved")
@@ -409,7 +392,7 @@ func (m Model) handleSaveSubjectConfirm(key string) (Model, tea.Cmd) {
 func (m Model) handleSaveSubjectInput(key string, msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch key {
 	case "enter":
-		subject := strings.TrimSpace(m.input)
+		subject := strings.TrimSpace(m.ti.Value)
 		if subject == "" {
 			m.message = i18n.T("save_no_empty")
 			return m, nil
@@ -419,20 +402,12 @@ func (m Model) handleSaveSubjectInput(key string, msg tea.KeyMsg) (Model, tea.Cm
 			return m.doSave()
 		}
 		m.step = stepSaveTags
-		m.input = ""
+		m.ti.Reset()
 	case "esc":
 		m.message = i18n.T("save_not_saved")
 		m.step = stepDone
-	case "backspace":
-		if len(m.input) > 0 {
-			m.input = m.input[:len(m.input)-1]
-		}
 	default:
-		if len(key) == 1 {
-			m.input += key
-		} else if key == "space" {
-			m.input += " "
-		}
+		m.ti.HandleKey(key)
 	}
 	return m, nil
 }
@@ -441,14 +416,14 @@ func (m Model) handleSaveTagsInput(key string, msg tea.KeyMsg) (Model, tea.Cmd) 
 	switch key {
 	case "tab":
 		if m.tagComplete.Active {
-			m.input = m.tagComplete.Accept(m.input)
+			m.ti.SetValue(m.tagComplete.Accept(m.ti.Value))
 		} else {
 			// Load known tags and trigger completion.
 			if m.tagComplete.KnownTags == nil {
 				tags, _ := db.GetAllTags(m.db)
 				m.tagComplete.KnownTags = tags
 			}
-			m.tagComplete.Complete(m.input)
+			m.tagComplete.Complete(m.ti.Value)
 		}
 		return m, nil
 	case "shift+tab":
@@ -458,10 +433,10 @@ func (m Model) handleSaveTagsInput(key string, msg tea.KeyMsg) (Model, tea.Cmd) 
 		}
 	case "enter":
 		if m.tagComplete.Active {
-			m.input = m.tagComplete.Accept(m.input)
+			m.ti.SetValue(m.tagComplete.Accept(m.ti.Value))
 			return m, nil
 		}
-		m.chosenTags = strings.TrimSpace(m.input)
+		m.chosenTags = strings.TrimSpace(m.ti.Value)
 		m.tagComplete.Reset()
 		return m.doSave()
 	case "esc":
@@ -471,17 +446,8 @@ func (m Model) handleSaveTagsInput(key string, msg tea.KeyMsg) (Model, tea.Cmd) 
 		}
 		m.message = i18n.T("save_not_saved")
 		m.step = stepDone
-	case "backspace":
-		if len(m.input) > 0 {
-			m.input = m.input[:len(m.input)-1]
-		}
-		m.tagComplete.Reset()
 	default:
-		if len(key) == 1 {
-			m.input += key
-		} else if key == "space" {
-			m.input += " "
-		}
+		m.ti.HandleKey(key)
 		m.tagComplete.Reset()
 	}
 	return m, nil
@@ -553,12 +519,14 @@ func (m Model) View() string {
 
 	switch m.step {
 	case stepSubject:
-		b.WriteString("  " + styles.TealBold.Render(i18n.T("menu_new")) + "\n\n")
+		b.WriteString("  " + styles.TealBold.Render(i18n.T("menu_new")) + "\n")
+		b.WriteString(components.StepIndicator(1, 3) + "\n\n")
 		b.WriteString("  " + i18n.T("new_subject_prompt") + "\n")
-		b.WriteString("  > " + m.input + "█\n")
+		b.WriteString("  > " + m.ti.View() + "\n")
 
 	case stepDirConfirm:
-		b.WriteString("  " + styles.TealBold.Render(i18n.T("menu_new")) + "\n\n")
+		b.WriteString("  " + styles.TealBold.Render(i18n.T("menu_new")) + "\n")
+		b.WriteString(components.StepIndicator(2, 3) + "\n\n")
 		if m.presetSubject != "" {
 			b.WriteString("  Subject: " + styles.Violet.Render(m.presetSubject) + "\n\n")
 		}
@@ -567,7 +535,7 @@ func (m Model) View() string {
 
 	case stepDirInput:
 		b.WriteString("  " + i18n.T("new_dir_enter_or_q") + " " + styles.Dim.Render("(Tab: autocomplete)") + "\n")
-		b.WriteString("  > " + m.input + "█\n")
+		b.WriteString("  > " + m.ti.View() + "\n")
 		if m.pathComplete.Active {
 			b.WriteString(m.pathComplete.View())
 		}
@@ -596,10 +564,12 @@ func (m Model) View() string {
 
 	case stepSaveConfirm:
 		b.WriteString(m.renderSaveBox())
+		b.WriteString(components.StepIndicator(1, 3) + "\n\n")
 		b.WriteString("  " + i18n.T("save_want") + " [" + i18n.ConfirmPrompt() + "] ")
 
 	case stepSaveSubjectConfirm:
 		b.WriteString(m.renderSaveBox())
+		b.WriteString(components.StepIndicator(2, 3) + "\n\n")
 		if m.isUpdate && m.existingSession != nil {
 			b.WriteString("  " + styles.Dim.Render(i18n.T("save_current_subject")+": "+m.existingSession.Subject) + "\n")
 		} else {
@@ -609,17 +579,19 @@ func (m Model) View() string {
 
 	case stepSaveSubjectInput:
 		b.WriteString(m.renderSaveBox())
+		b.WriteString(components.StepIndicator(2, 3) + "\n\n")
 		b.WriteString("  " + i18n.T("save_enter") + ":\n")
-		b.WriteString("  > " + m.input + "█\n")
+		b.WriteString("  > " + m.ti.View() + "\n")
 		if m.message != "" {
 			b.WriteString("  " + styles.Amber.Render(m.message) + "\n")
 		}
 
 	case stepSaveTags:
 		b.WriteString(m.renderSaveBox())
+		b.WriteString(components.StepIndicator(3, 3) + "\n\n")
 		b.WriteString("  Subject: " + styles.Violet.Render(m.chosenSubject) + "\n\n")
 		b.WriteString("  " + i18n.T("save_tags") + " " + styles.Dim.Render("(Tab: autocomplete)") + ":\n")
-		b.WriteString("  > " + m.input + "█\n")
+		b.WriteString("  > " + m.ti.View() + "\n")
 		if m.tagComplete.Active {
 			b.WriteString(m.tagComplete.View())
 		}

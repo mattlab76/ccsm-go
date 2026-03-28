@@ -161,6 +161,21 @@ func (m *Model) buildContent() {
 		add(fmt.Sprintf("    %s: %s  %s", i18n.T("stats_output"), components.FormatTokens(m.lifetimeOut), renderBar(m.lifetimeOut, m.lifetimeIn, false)))
 	}
 
+	// Token usage over time (sparkline).
+	if len(m.sessions) > 1 {
+		add("")
+		add("  " + styles.Bold.Render("Token Usage Over Time"))
+		// Sessions are newest-first, reverse for chronological sparkline.
+		sparkData := make([]components.SparklineData, len(m.sessions))
+		for i, s := range m.sessions {
+			sparkData[len(m.sessions)-1-i] = components.SparklineData{
+				Label: s.CreatedAt.Format("01-02"),
+				Value: s.TotalInputTokens,
+			}
+		}
+		add("    " + components.RenderSparklineWithLabels(sparkData, 40))
+	}
+
 	// Token info.
 	add("")
 	add("  " + styles.Amber.Render(i18n.T("stats_token_info")))

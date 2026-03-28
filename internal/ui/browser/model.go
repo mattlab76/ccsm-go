@@ -3,6 +3,7 @@ package browser
 import (
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -30,6 +31,7 @@ type mode int
 const (
 	modeNavigate mode = iota // Arrow keys to navigate, Enter to select
 	modeSearch               // Typing search query with live filter
+	modePreview              // Detail preview of selected session
 )
 
 // Model is the session browser view.
@@ -41,10 +43,31 @@ type Model struct {
 	height   int
 	mode     mode
 	cursor   int    // 0-based index of selected row
-	input    string // search input
+	ti       components.TextInput
 	search   string // active search query
 	message  string
-	offset   int // scroll offset for long lists
+	offset   int      // scroll offset for long lists
+	sortMode sortMode // current sort order
+}
+
+type sortMode int
+
+const (
+	sortByDate   sortMode = iota // newest first (default)
+	sortByName                   // alphabetical by subject
+	sortByTokens                 // most tokens first
+)
+
+func (s sortMode) String() string {
+	switch s {
+	case sortByDate:
+		return "Date ↓"
+	case sortByName:
+		return "Name ↑"
+	case sortByTokens:
+		return "Tokens ↓"
+	}
+	return ""
 }
 
 // New creates a new browser model.
@@ -81,10 +104,31 @@ func (m *Model) loadSessions(query string) {
 			Status:  status,
 		}
 	}
+	m.applySortOrder()
 	// Reset cursor.
 	m.cursor = 0
 	m.offset = 0
 	m.updateSelection()
+}
+
+func (m *Model) applySortOrder() {
+	switch m.sortMode {
+	case sortByDate:
+		// Already sorted by DB query (newest first), no action needed.
+	case sortByName:
+		sort.Slice(m.sessions, func(i, j int) bool {
+			return strings.ToLower(m.sessions[i].Subject) < strings.ToLower(m.sessions[j].Subject)
+		})
+	case sortByTokens:
+		sort.Slice(m.sessions, func(i, j int) bool {
+			return m.sessions[i].TotalInputTokens > m.sessions[j].TotalInputTokens
+		})
+	}
+	// Rebuild rows after sorting.
+	for i, s := range m.sessions {
+		m.rows[i].Num = i + 1
+		m.rows[i].Session = s
+	}
 }
 
 func (m *Model) updateSelection() {
@@ -134,6 +178,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m.handleNavigate(key)
 	case modeSearch:
 		return m.handleSearch(key, msg)
+	case modePreview:
+		return m.handlePreview(key)
 	}
 	return m, nil
 }
@@ -195,21 +241,25 @@ func (m Model) handleNavigate(key string) (Model, tea.Cmd) {
 		m.updateSelection()
 	case "enter":
 		if m.cursor >= 0 && m.cursor < len(m.sessions) {
-			s := m.sessions[m.cursor]
-			return m, func() tea.Msg {
-				return ResumeSessionMsg{SID: s.SID, CWD: s.CWD}
-			}
+			m.mode = modePreview
 		}
+	case "s":
+		// Cycle sort mode.
+		m.sortMode = (m.sortMode + 1) % 3
+		m.applySortOrder()
+		m.cursor = 0
+		m.offset = 0
+		m.updateSelection()
 	case "/":
 		// Switch to search mode.
 		m.mode = modeSearch
-		m.input = ""
+		m.ti.Reset()
 		m.message = ""
 	case "esc", "q":
 		if m.search != "" {
 			// Clear search, show all.
 			m.search = ""
-			m.input = ""
+			m.ti.Reset()
 			m.message = ""
 			m.loadSessions("")
 			return m, nil
@@ -224,7 +274,7 @@ func (m Model) handleSearch(key string, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case "enter":
 		// Accept search and switch to navigate mode.
 		m.mode = modeNavigate
-		m.search = strings.TrimSpace(m.input)
+		m.search = strings.TrimSpace(m.ti.Value)
 		if m.search == "" {
 			m.loadSessions("")
 		}
@@ -232,30 +282,19 @@ func (m Model) handleSearch(key string, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case "esc":
 		// Cancel search, restore all sessions.
 		m.mode = modeNavigate
-		m.input = ""
+		m.ti.Reset()
 		m.search = ""
 		m.message = ""
 		m.loadSessions("")
-	case "backspace":
-		if len(m.input) > 0 {
-			m.input = m.input[:len(m.input)-1]
-		}
-		// Live filter on every keystroke.
-		m.liveFilter()
 	default:
-		if len(key) == 1 {
-			m.input += key
-		} else if key == "space" {
-			m.input += " "
-		}
-		// Live filter on every keystroke.
+		m.ti.HandleKey(key)
 		m.liveFilter()
 	}
 	return m, nil
 }
 
 func (m *Model) liveFilter() {
-	query := strings.TrimSpace(m.input)
+	query := strings.TrimSpace(m.ti.Value)
 	m.search = query
 	m.loadSessions(query)
 	if len(m.sessions) == 0 && query != "" {
@@ -263,6 +302,51 @@ func (m *Model) liveFilter() {
 	} else {
 		m.message = ""
 	}
+}
+
+func (m Model) handlePreview(key string) (Model, tea.Cmd) {
+	switch key {
+	case "enter", "y", "j":
+		// Confirm resume.
+		if m.cursor >= 0 && m.cursor < len(m.sessions) {
+			s := m.sessions[m.cursor]
+			return m, func() tea.Msg {
+				return ResumeSessionMsg{SID: s.SID, CWD: s.CWD}
+			}
+		}
+	case "esc", "q", "n", "backspace":
+		m.mode = modeNavigate
+	}
+	return m, nil
+}
+
+func (m Model) renderPreview() string {
+	if m.cursor < 0 || m.cursor >= len(m.sessions) {
+		return ""
+	}
+	s := m.sessions[m.cursor]
+	var b strings.Builder
+	b.WriteString("\n")
+	b.WriteString("  " + styles.TealBold.Render("Session Details") + "\n\n")
+	b.WriteString("  Subject:   " + styles.Violet.Render(s.Subject) + "\n")
+	b.WriteString("  Directory: " + styles.Teal.Render(s.CWD) + "\n")
+	b.WriteString("  Date:      " + s.CreatedAt.Format("2006-01-02 15:04") + "\n")
+	if s.Tags != "" && s.Tags != "-" {
+		b.WriteString("  Tags:      " + s.Tags + "\n")
+	}
+	b.WriteString(fmt.Sprintf("  Tokens:    %s in / %s out",
+		components.FormatTokens(s.TotalInputTokens),
+		components.FormatTokens(s.TotalOutputTokens)))
+	if s.LastInputTokens > 0 {
+		b.WriteString(fmt.Sprintf("  (last: %s in / %s out)",
+			components.FormatTokens(s.LastInputTokens),
+			components.FormatTokens(s.LastOutputTokens)))
+	}
+	b.WriteString("\n")
+	b.WriteString("  SID:       " + styles.Dim.Render(s.SID) + "\n")
+	b.WriteString("\n")
+	b.WriteString("  " + styles.Green.Render("Enter") + " resume  " + styles.Dim.Render("Esc back") + "\n")
+	return b.String()
 }
 
 func (m Model) View() string {
@@ -328,9 +412,12 @@ func (m Model) View() string {
 	// Hints and input based on mode.
 	switch m.mode {
 	case modeNavigate:
-		b.WriteString("  " + styles.Dim.Render("↑/↓ navigate  Enter resume  / search  q back") + "\n")
+		b.WriteString("  " + styles.Dim.Render("↑/↓ navigate  Enter details  / search  s sort  q back"))
+		b.WriteString("  " + styles.Violet.Render("["+m.sortMode.String()+"]") + "\n")
 	case modeSearch:
-		b.WriteString("  " + i18n.T("search_prompt") + ": " + m.input + "█\n")
+		b.WriteString("  " + i18n.T("search_prompt") + ": " + m.ti.View() + "\n")
+	case modePreview:
+		b.WriteString(m.renderPreview())
 	}
 
 	return b.String()
