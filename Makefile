@@ -6,7 +6,7 @@ BUILD := go build $(GOFLAGS) -ldflags '$(LDFLAGS)'
 
 PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 freebsd/amd64 windows/amd64
 
-.PHONY: build build-all test lint install clean help
+.PHONY: build build-all test test-v test-report lint install clean help
 
 ## build: Build for current platform
 build:
@@ -32,6 +32,10 @@ test:
 ## test-v: Run all tests with verbose output
 test-v:
 	go test ./... -v -count=1
+
+## test-report: Run tests + coverage, append entry to TESTRESULTS.md, stage the file
+test-report:
+	@./scripts/test-report.sh
 
 ## lint: Run golangci-lint (install with: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest)
 lint:

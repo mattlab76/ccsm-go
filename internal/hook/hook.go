@@ -10,7 +10,10 @@ import (
 	"time"
 )
 
-const tmpDir = "/tmp/ccsm"
+// tmpDir is the spool directory the SessionEnd hook script writes
+// into. Declared as var (not const) so tests can redirect it to a
+// t.TempDir() and not touch the real /tmp/ccsm.
+var tmpDir = "/tmp/ccsm"
 
 // HookData holds the session metadata written by the hook script.
 type HookData struct {
