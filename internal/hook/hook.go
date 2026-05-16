@@ -55,12 +55,18 @@ func ReadSessionData(sid string) (*HookData, error) {
 	return &h, nil
 }
 
-// FindSessionDataForDir finds the most recent temp file matching the given working directory.
-// Falls back to FindLatestSessionData if no match is found.
+// FindSessionDataForDir returns the most recent hook temp file whose
+// recorded cwd matches dir. Returns an error if no such file exists.
+//
+// Earlier versions fell back to "the latest hook file of any session"
+// when no match was found — that could attach unrelated session data
+// to the wrong session, producing the cwd/SID mismatches we now guard
+// against. The caller is expected to attempt transcript recovery
+// (claude.RecoverFromTranscript) on miss instead.
 func FindSessionDataForDir(dir string) (*HookData, error) {
 	entries, err := os.ReadDir(tmpDir)
 	if err != nil {
-		return FindLatestSessionData()
+		return nil, fmt.Errorf("no hook data found: %w", err)
 	}
 
 	var best *HookData
@@ -86,7 +92,7 @@ func FindSessionDataForDir(dir string) (*HookData, error) {
 	if best != nil {
 		return best, nil
 	}
-	return FindLatestSessionData()
+	return nil, fmt.Errorf("no hook data found for %s", dir)
 }
 
 // FindLatestSessionData finds the most recently modified temp file.

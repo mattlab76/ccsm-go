@@ -62,6 +62,7 @@ type Model struct {
 	// Session data from hook
 	hookData    *hook.HookData
 	isUpdate    bool // true if session already exists in DB
+	recovered   bool // true if hookData was rebuilt from transcript
 	existingSession *model.Session
 
 	// Save state
@@ -312,12 +313,28 @@ func (m Model) launchClaude() (Model, tea.Cmd) {
 }
 
 func (m Model) handleSessionFinished(msg claude.SessionFinishedMsg) (Model, tea.Cmd) {
-	// Try to read hook data — prefer matching by directory.
+	// Prefer hook data: it's authoritative when present.
 	hookData, err := hook.FindSessionDataForDir(m.targetDir)
 	if err != nil {
-		m.message = i18n.T("save_no_data")
-		m.step = stepDone
-		return m, nil
+		// Hook didn't fire — Claude crashed, was killed with Ctrl+C,
+		// the hook timed out, etc. Fall back to reconstructing from
+		// the JSONL transcript on disk so the user doesn't lose track
+		// of the session.
+		if rec := claude.RecoverFromTranscript(m.targetDir); rec != nil {
+			hookData = &hook.HookData{
+				SessionID:    rec.SID,
+				CWD:          rec.CWD,
+				Subject:      rec.Subject,
+				Transcript:   rec.TranscriptPath,
+				InputTokens:  rec.InputTokens,
+				OutputTokens: rec.OutputTokens,
+			}
+			m.recovered = true
+		} else {
+			m.message = i18n.T("save_no_data")
+			m.step = stepDone
+			return m, nil
+		}
 	}
 	m.hookData = hookData
 
@@ -467,12 +484,18 @@ func (m Model) doSave() (Model, tea.Cmd) {
 		tags = m.existingSession.Tags
 	}
 
+	// Claude's hook gives us the *current* cwd at session end, which may
+	// differ from the *project directory* it stored the transcript in
+	// (e.g. when the user cd'd or used --add-dir). Resolve to the path
+	// `claude --resume` will actually look in, so resume keeps working.
+	resolvedCWD := claude.ResolveSessionCWD(h.SessionID, h.CWD)
+
 	s := &model.Session{
-		SID:       h.SessionID,
-		CWD:       h.CWD,
-		Subject:   m.chosenSubject,
-		CreatedAt: now,
-		Tags:      tags,
+		SID:              h.SessionID,
+		CWD:              resolvedCWD,
+		Subject:          m.chosenSubject,
+		CreatedAt:        now,
+		Tags:             tags,
 		LastInputTokens:  h.InputTokens,
 		LastOutputTokens: h.OutputTokens,
 	}
@@ -618,6 +641,11 @@ func (m Model) renderSaveBox() string {
 
 	var b strings.Builder
 	b.WriteString("  " + styles.TealBold.Render(i18n.T("save_title")) + "\n\n")
+	if m.recovered {
+		// Flag this clearly so the user knows we reconstructed it from
+		// the transcript file rather than relying on the hook.
+		b.WriteString("  " + styles.Amber.Render("⚠ "+i18n.T("save_recovered")) + "\n")
+	}
 	b.WriteString("  Dir:        " + h.CWD + "\n")
 	b.WriteString("  Tokens in:  " + fmtIn + "\n")
 	b.WriteString("  Tokens out: " + fmtOut + "\n\n")

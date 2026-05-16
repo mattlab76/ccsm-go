@@ -2,10 +2,12 @@ package app
 
 import (
 	"os"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/mattlab76/ccsm-go/internal/claude"
 	"github.com/mattlab76/ccsm-go/internal/db"
+	"github.com/mattlab76/ccsm-go/internal/i18n"
 	"github.com/mattlab76/ccsm-go/internal/ui/browser"
 	"github.com/mattlab76/ccsm-go/internal/ui/components"
 	"github.com/mattlab76/ccsm-go/internal/ui/delete"
@@ -15,6 +17,7 @@ import (
 	"github.com/mattlab76/ccsm-go/internal/ui/settings"
 	"github.com/mattlab76/ccsm-go/internal/ui/stats"
 	"github.com/mattlab76/ccsm-go/internal/ui/startup"
+	"github.com/mattlab76/ccsm-go/internal/ui/styles"
 )
 
 // ViewType identifies the active view.
@@ -52,6 +55,10 @@ type Model struct {
 	logView      uilog.Model
 	settingsView settings.Model
 	startupView  startup.Model
+
+	// quitConfirm gates Ctrl+C so a stray press during paste
+	// (Ctrl+Shift+V) doesn't tear down ccsm without warning.
+	quitConfirm bool
 }
 
 // New creates a new root model. If expired, non-dismissed sessions exist,
@@ -92,8 +99,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.startupView = m.startupView.SetSize(msg.Width, msg.Height)
 
 	case tea.KeyMsg:
-		if msg.String() == "ctrl+c" {
-			return m, tea.Quit
+		key := msg.String()
+		// While the quit-confirm overlay is up, swallow keys so the
+		// underlying view doesn't react to them.
+		if m.quitConfirm {
+			switch strings.ToLower(key) {
+			case "y", "j", "enter", "ctrl+c":
+				return m, tea.Quit
+			case "n", "esc", "q":
+				m.quitConfirm = false
+			}
+			return m, nil
+		}
+		// First Ctrl+C: show the confirm modal instead of quitting.
+		if key == "ctrl+c" {
+			m.quitConfirm = true
+			return m, nil
 		}
 
 	// View switch messages from children.
@@ -210,6 +231,19 @@ func (m Model) handleChildSwitch(view ViewType) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) startResume(sid, cwd string) (tea.Model, tea.Cmd) {
+	// Self-heal: if the stored cwd doesn't match where Claude actually
+	// kept the transcript, rewrite the row before launching. Otherwise
+	// `claude --resume` would print "No conversation found" because it
+	// looks inside the stored cwd's project directory.
+	if resolved := claude.ResolveSessionCWD(sid, cwd); resolved != cwd {
+		if s, err := db.GetSession(m.db, sid); err == nil {
+			s.CWD = resolved
+			_ = db.SaveSession(m.db, s)
+			db.LogAction(m.db, "RESUME", "auto-fixed cwd: "+cwd+" → "+resolved)
+		}
+		cwd = resolved
+	}
+
 	// Check if claude is already running in this directory.
 	if claude.IsClaudeRunningInDir(cwd) {
 		m.currentView = ViewNewSession
@@ -266,5 +300,54 @@ func (m Model) View() string {
 		hints = components.StatusBarItems("↑↓", "nav", "Enter", "activate", "p", "purge", "d", "dismiss", "s/Esc", "skip")
 	}
 
-	return content + "\n" + components.StatusBar(hints, m.width)
+	full := content + "\n" + components.StatusBar(hints, m.width)
+	if m.quitConfirm {
+		// Overlay the modal beneath the current content. Replacing the
+		// whole screen would lose context; keeping it visible reminds
+		// the user where they were about to lose their work.
+		return full + "\n\n" + renderQuitConfirm(m.width)
+	}
+	return full
+}
+
+// renderQuitConfirm builds a centered red-bordered modal asking whether
+// to really exit ccsm. Three keys answer it: y/Enter/Ctrl+C confirm,
+// n/Esc/q dismiss.
+func renderQuitConfirm(width int) string {
+	title := i18n.T("quit_title")
+	warning := i18n.T("quit_warning")
+	hint := i18n.T("quit_hint")
+
+	innerW := 58
+	pad := func(s string, w int) string {
+		runes := []rune(s)
+		if len(runes) >= w {
+			return string(runes[:w])
+		}
+		return s + strings.Repeat(" ", w-len(runes))
+	}
+	bar := strings.Repeat("═", innerW+2)
+
+	lines := []string{
+		styles.Red.Render("╔" + bar + "╗"),
+		styles.Red.Render("║ " + pad("", innerW) + " ║"),
+		styles.Red.Render("║ ") + styles.Bold.Render(pad(title, innerW)) + styles.Red.Render(" ║"),
+		styles.Red.Render("║ " + pad("", innerW) + " ║"),
+		styles.Red.Render("║ ") + styles.Dim.Render(pad(warning, innerW)) + styles.Red.Render(" ║"),
+		styles.Red.Render("║ " + pad("", innerW) + " ║"),
+		styles.Red.Render("║ ") + pad(hint, innerW) + styles.Red.Render(" ║"),
+		styles.Red.Render("║ " + pad("", innerW) + " ║"),
+		styles.Red.Render("╚" + bar + "╝"),
+	}
+
+	leftPad := 4
+	if width > innerW+6 {
+		leftPad = (width - innerW - 4) / 2
+	}
+	indent := strings.Repeat(" ", leftPad)
+	var b strings.Builder
+	for _, l := range lines {
+		b.WriteString(indent + l + "\n")
+	}
+	return b.String()
 }

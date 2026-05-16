@@ -120,6 +120,7 @@ var langEN = map[string]string{
 	"save_updated":         "Session updated",
 	"save_not_saved":       "Not saved.",
 	"save_no_data":         "No session data received (hook not triggered?).",
+	"save_recovered":       "Hook missed — recovered from transcript file.",
 	"save_current_subject": "Current subject",
 
 	// Delete
@@ -129,6 +130,11 @@ var langEN = map[string]string{
 
 	// Usage banner above the main menu (figures derived from local JSONL transcripts).
 	"usage_banner": "Today: %s · 7d: %s · Top: %s",
+
+	// Quit confirmation modal (triggered by Ctrl+C anywhere in the app).
+	"quit_title":   "⚠  Really quit ccsm?",
+	"quit_hint":    "Press Ctrl+C again or [y]/Enter to quit · [n]/Esc/q to stay",
+	"quit_warning": "Running Claude sessions stay alive — only ccsm closes.",
 
 	// Startup check (invalid sessions)
 	"startup_title":                 "Session Health Check",
@@ -287,6 +293,7 @@ var langDE = map[string]string{
 	"save_updated":         "Session aktualisiert",
 	"save_not_saved":       "Nicht gespeichert.",
 	"save_no_data":         "Keine Session-Daten empfangen (Hook nicht ausgelöst?).",
+	"save_recovered":       "Hook fehlte — aus Transcript-Datei rekonstruiert.",
 	"save_current_subject": "Aktueller Betreff",
 
 	// Delete
@@ -296,6 +303,11 @@ var langDE = map[string]string{
 
 	// Usage banner above the main menu (figures derived from local JSONL transcripts).
 	"usage_banner": "Heute: %s · 7T: %s · Top: %s",
+
+	// Quit confirmation modal (triggered by Ctrl+C anywhere in the app).
+	"quit_title":   "⚠  ccsm wirklich beenden?",
+	"quit_hint":    "Nochmal Strg+C oder [y]/Enter zum Beenden · [n]/Esc/q für Abbruch",
+	"quit_warning": "Laufende Claude-Sessions bleiben aktiv — nur ccsm schließt.",
 
 	// Startup check (invalid sessions)
 	"startup_title":                 "Session-Prüfung",
