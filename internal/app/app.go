@@ -14,6 +14,7 @@ import (
 	"github.com/mattlab76/ccsm-go/internal/ui/newsession"
 	"github.com/mattlab76/ccsm-go/internal/ui/settings"
 	"github.com/mattlab76/ccsm-go/internal/ui/stats"
+	"github.com/mattlab76/ccsm-go/internal/ui/startup"
 )
 
 // ViewType identifies the active view.
@@ -27,6 +28,7 @@ const (
 	ViewStats
 	ViewLog
 	ViewSettings
+	ViewStartupCheck
 )
 
 // SwitchViewMsg tells the app to switch to a different view.
@@ -42,25 +44,36 @@ type Model struct {
 	height      int
 
 	// Child models
-	mainMenu   mainmenu.Model
-	newSession newsession.Model
-	browser    browser.Model
-	deleteView delete.Model
+	mainMenu     mainmenu.Model
+	newSession   newsession.Model
+	browser      browser.Model
+	deleteView   delete.Model
 	statsView    stats.Model
 	logView      uilog.Model
 	settingsView settings.Model
+	startupView  startup.Model
 }
 
-// New creates a new root model.
+// New creates a new root model. If expired, non-dismissed sessions exist,
+// it opens with the startup check; otherwise it goes straight to the
+// main menu.
 func New(database *db.DB) Model {
-	return Model{
-		db:          database,
-		currentView: ViewMainMenu,
-		mainMenu:    mainmenu.New(database),
+	m := Model{db: database}
+	startupModel := startup.New(database)
+	if startupModel.HasWork() {
+		m.currentView = ViewStartupCheck
+		m.startupView = startupModel
+	} else {
+		m.currentView = ViewMainMenu
+		m.mainMenu = mainmenu.New(database)
 	}
+	return m
 }
 
 func (m Model) Init() tea.Cmd {
+	if m.currentView == ViewStartupCheck {
+		return m.startupView.Init()
+	}
 	return m.mainMenu.Init()
 }
 
@@ -76,6 +89,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statsView = m.statsView.SetSize(msg.Width, msg.Height)
 		m.logView = m.logView.SetSize(msg.Width, msg.Height)
 		m.settingsView = m.settingsView.SetSize(msg.Width, msg.Height)
+		m.startupView = m.startupView.SetSize(msg.Width, msg.Height)
 
 	case tea.KeyMsg:
 		if msg.String() == "ctrl+c" {
@@ -96,6 +110,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case uilog.SwitchViewMsg:
 		return m.handleChildSwitch(ViewType(msg.View))
 	case settings.SwitchViewMsg:
+		return m.handleChildSwitch(ViewType(msg.View))
+	case startup.SwitchViewMsg:
 		return m.handleChildSwitch(ViewType(msg.View))
 
 	// Resume messages from children.
@@ -135,6 +151,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.settingsView, cmd = m.settingsView.Update(msg)
 		return m, cmd
+	case ViewStartupCheck:
+		var cmd tea.Cmd
+		m.startupView, cmd = m.startupView.Update(msg)
+		return m, cmd
 	default:
 		// Stub views: q returns to main menu.
 		if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.String() == "q" {
@@ -169,6 +189,9 @@ func (m Model) handleChildSwitch(view ViewType) (tea.Model, tea.Cmd) {
 	case ViewSettings:
 		m.settingsView = settings.New(m.db)
 		m.settingsView = m.settingsView.SetSize(m.width, m.height)
+	case ViewStartupCheck:
+		m.startupView = startup.New(m.db)
+		m.startupView = m.startupView.SetSize(m.width, m.height)
 	}
 	return m, nil
 }
@@ -225,6 +248,9 @@ func (m Model) View() string {
 	case ViewSettings:
 		content = m.settingsView.View()
 		hints = components.StatusBarItems("1-3", "edit", "q", "back")
+	case ViewStartupCheck:
+		content = m.startupView.View()
+		hints = components.StatusBarItems("p", "purge", "d", "dismiss", "s/Esc", "skip")
 	}
 
 	return content + "\n" + components.StatusBar(hints, m.width)

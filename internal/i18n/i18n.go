@@ -127,6 +127,16 @@ var langEN = map[string]string{
 	"delete_confirm": "Really delete this session?",
 	"delete_done":    "Session deleted.",
 
+	// Startup check (invalid sessions)
+	"startup_title":   "Session Health Check",
+	"startup_summary": "%d session(s) are expired at Claude Code (transcript gone).",
+	"startup_explain": "These sessions cannot be resumed anymore.",
+	"startup_more":    "... and %d more",
+	"startup_purge":   "Purge all (delete from ccsm)",
+	"startup_dismiss": "Dismiss all (keep, don't ask again)",
+	"startup_skip":    "Skip for now (ask again next start)",
+	"startup_hint":    "Choose [p] / [d] / [s]  ·  Esc/Enter = skip",
+
 	// Cleanup
 	"cleanup_title":         "Old Sessions (>%d days)",
 	"cleanup_done":          "%d session(s) deleted.",
@@ -265,6 +275,16 @@ var langDE = map[string]string{
 	"delete_title":   "Session löschen",
 	"delete_confirm": "Diese Session wirklich löschen?",
 	"delete_done":    "Session gelöscht.",
+
+	// Startup check (invalid sessions)
+	"startup_title":   "Session-Prüfung",
+	"startup_summary": "%d Session(s) sind bei Claude Code abgelaufen (Transcript fehlt).",
+	"startup_explain": "Diese Sessions können nicht mehr fortgesetzt werden.",
+	"startup_more":    "... und %d weitere",
+	"startup_purge":   "Alle löschen (aus ccsm entfernen)",
+	"startup_dismiss": "Alle ignorieren (behalten, nicht mehr fragen)",
+	"startup_skip":    "Vorerst überspringen (beim nächsten Start wieder fragen)",
+	"startup_hint":    "Wähle [p] / [d] / [s]  ·  Esc/Enter = überspringen",
 
 	// Cleanup
 	"cleanup_title":         "Alte Sessions (>%d Tage)",
