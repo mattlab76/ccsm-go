@@ -161,6 +161,20 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 				return ResumeSessionMsg{SID: s.SID, CWD: s.CWD}
 			}
 		}
+	case "f":
+		// Fork: start a fresh Claude session in the cursor session's
+		// working directory, pre-filling subject + tags. New SID, no
+		// `--resume`. Only meaningful when the cursor is on a session.
+		if m.cursor < len(m.sessions) {
+			s := m.sessions[m.cursor]
+			return m, func() tea.Msg {
+				return ForkSessionMsg{
+					CWD:     s.CWD,
+					Subject: s.Subject,
+					Tags:    s.Tags,
+				}
+			}
+		}
 	}
 	return m, nil
 }
@@ -241,7 +255,7 @@ func (m Model) View() string {
 
 	// Hints
 	b.WriteString("\n")
-	b.WriteString("  " + styles.Dim.Render("↑/↓ navigate  Enter activate  shortcut for direct action") + "\n")
+	b.WriteString("  " + styles.Dim.Render("↑/↓ navigate  Enter activate  f fork session  shortcut for direct action") + "\n")
 
 	return b.String()
 }
@@ -311,6 +325,16 @@ type SwitchViewMsg struct {
 type ResumeSessionMsg struct {
 	SID string
 	CWD string
+}
+
+// ForkSessionMsg is sent to the parent app to start a fresh Claude
+// session in an existing session's working directory, pre-filling
+// the save dialog with that session's subject and tags. Triggered by
+// the `f` shortcut on a cursor-selected session row.
+type ForkSessionMsg struct {
+	CWD     string
+	Subject string
+	Tags    string
 }
 
 func switchView(v int) tea.Cmd {

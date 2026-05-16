@@ -8,6 +8,7 @@ import (
 	"github.com/mattlab76/ccsm-go/internal/claude"
 	"github.com/mattlab76/ccsm-go/internal/db"
 	"github.com/mattlab76/ccsm-go/internal/i18n"
+	"github.com/mattlab76/ccsm-go/internal/model"
 	"github.com/mattlab76/ccsm-go/internal/ui/browser"
 	"github.com/mattlab76/ccsm-go/internal/ui/components"
 	"github.com/mattlab76/ccsm-go/internal/ui/delete"
@@ -140,6 +141,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.startResume(msg.SID, msg.CWD)
 	case browser.ResumeSessionMsg:
 		return m.startResume(msg.SID, msg.CWD)
+
+	// Fork message: spin up a fresh Claude session in an existing
+	// session's working directory with subject + tags pre-filled.
+	case mainmenu.ForkSessionMsg:
+		return m.startFork(msg.CWD, msg.Subject, msg.Tags)
 	}
 
 	// Route to active view.
@@ -267,6 +273,27 @@ func (m Model) startResume(sid, cwd string) (tea.Model, tea.Cmd) {
 	return m, func() tea.Msg {
 		return newsession.StartResumeMsg{SID: sid, CWD: cwd}
 	}
+}
+
+// startFork launches a brand-new Claude session in cwd with subject +
+// tags pre-filled from the source session. Distinct from startResume:
+// new SID is assigned by Claude, no `--resume` flag is passed.
+func (m Model) startFork(cwd, subject, tags string) (tea.Model, tea.Cmd) {
+	if claude.IsClaudeRunningInDir(cwd) {
+		m.currentView = ViewNewSession
+		m.newSession = newsession.NewAlreadyRunning(m.db, cwd)
+		m.newSession = m.newSession.SetSize(m.width, m.height)
+		return m, nil
+	}
+
+	m.currentView = ViewNewSession
+	m.newSession = newsession.NewForFork(m.db, cwd, subject, tags)
+	m.newSession = m.newSession.SetSize(m.width, m.height)
+
+	claude.CreateSessionLock(cwd, os.Getpid())
+	db.LogAction(m.db, model.ActionNew, "fork: "+subject+" ("+cwd+")")
+
+	return m, claude.StartSession(cwd)
 }
 
 func (m Model) View() string {

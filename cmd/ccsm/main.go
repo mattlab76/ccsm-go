@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
+	"strconv"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/mattlab76/ccsm-go/internal/app"
@@ -19,10 +21,23 @@ func main() {
 	i18n.SetLang(i18n.DetectLang())
 
 	rootCmd := &cobra.Command{
-		Use:   "ccsm",
+		Use:   "ccsm [N]",
 		Short: i18n.T("title"),
-		Long:  fmt.Sprintf("%s v%s", i18n.T("title"), model.Version),
+		Long: fmt.Sprintf(`%s v%s
+
+  ccsm            launch the interactive TUI
+  ccsm <N>        resume the Nth most recent session directly (1 = newest)
+`, i18n.T("title"), model.Version),
+		Args: cobra.MaximumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
+			// Single numeric argument = quick-resume the Nth session
+			// without opening the TUI.
+			if len(args) == 1 {
+				if n, err := strconv.Atoi(args[0]); err == nil && n > 0 {
+					quickResume(n)
+					return
+				}
+			}
 			runTUI()
 		},
 	}
@@ -55,6 +70,72 @@ func loadLang(database *db.DB) {
 	settings, err := db.GetSettings(database)
 	if err == nil && settings.Lang != "" {
 		i18n.SetLang(settings.Lang)
+	}
+}
+
+// quickResume launches `claude --resume <SID>` for the Nth most recent
+// session in the DB (1 = newest) without opening the TUI. Mirrors the
+// safety net app.startResume applies: cleans stale lock files, self-
+// heals the stored cwd if Claude's transcript moved, refuses if a
+// session is already active in that directory.
+func quickResume(n int) {
+	database := openDB()
+	defer database.Close()
+	loadLang(database)
+	claude.CleanupStaleLocks()
+
+	sessions, err := db.ListSessions(database, 0)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	if n > len(sessions) {
+		fmt.Fprintf(os.Stderr,
+			"Error: only %d session(s) available, asked for #%d\n",
+			len(sessions), n)
+		os.Exit(1)
+	}
+	s := sessions[n-1]
+
+	// Self-heal stored cwd if Claude's transcript actually lives
+	// elsewhere (e.g. because the hook captured a post-`cd` cwd).
+	cwd := claude.ResolveSessionCWD(s.SID, s.CWD)
+	if cwd != s.CWD {
+		old := s.CWD
+		s.CWD = cwd
+		_ = db.SaveSession(database, &s)
+		db.LogAction(database, "RESUME",
+			"auto-fixed cwd: "+old+" → "+cwd)
+	}
+
+	if claude.IsClaudeRunningInDir(cwd) {
+		fmt.Fprintf(os.Stderr,
+			"A Claude session is already active in %s — refusing to start a second one.\n",
+			cwd)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Resuming #%d: %s (%s)\n", n, s.Subject, cwd)
+	_ = claude.CreateSessionLock(cwd, os.Getpid())
+	defer claude.RemoveSessionLock(cwd)
+
+	db.LogAction(database, "RESUME", s.Subject+" ("+cwd+")")
+	_ = db.MoveToEnd(database, s.SID)
+
+	// Hand off to claude. stdin/stdout/stderr stay attached so the
+	// user gets a normal interactive session.
+	cmd := exec.Command("claude", "--resume", s.SID)
+	cmd.Dir = cwd
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		// Claude exits non-zero on /quit etc. — that's not a ccsm error.
+		// Only flag if it never started.
+		if _, ok := err.(*exec.ExitError); !ok {
+			fmt.Fprintf(os.Stderr, "Error running claude: %v\n", err)
+			os.Exit(1)
+		}
 	}
 }
 

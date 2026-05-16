@@ -109,6 +109,23 @@ func NewForResume(database *db.DB, sid string) Model {
 	return m
 }
 
+// NewForFork creates a model that starts a fresh Claude session in
+// the given directory with subject + tags pre-filled from the source
+// session. New SID is assigned by Claude; the save dialog at the end
+// proposes the original subject so the user can keep or edit it.
+//
+// Caller still needs to dispatch claude.StartSession(cwd) — typically
+// from app.startFork after the lock-file dance.
+func NewForFork(database *db.DB, cwd, subject, tags string) Model {
+	return Model{
+		db:            database,
+		step:          stepLaunching,
+		targetDir:     cwd,
+		presetSubject: subject,
+		chosenTags:    tags,
+	}
+}
+
 func (m Model) SetSize(width, height int) Model {
 	m.width = width
 	m.height = height

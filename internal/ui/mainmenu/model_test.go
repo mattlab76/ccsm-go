@@ -212,6 +212,56 @@ func TestNumberKeyOutOfRangeIsNoOp(t *testing.T) {
 	}
 }
 
+// ─── Fork hotkey ────────────────────────────────────────────────────
+
+func TestForkOnSessionEmitsForkMsg(t *testing.T) {
+	d := setup(t)
+	// Seed a session with subject + tags so we can verify they're carried.
+	s := &model.Session{
+		SID:       "fork-source",
+		CWD:       "/work/repo",
+		Subject:   "original subject",
+		Tags:      "urgent backend",
+		CreatedAt: time.Now(),
+	}
+	if err := db.SaveSession(d, s); err != nil {
+		t.Fatal(err)
+	}
+	m := New(d)
+
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
+	if cmd == nil {
+		t.Fatal("f should emit a ForkSessionMsg")
+	}
+	msg := cmd()
+	fm, ok := msg.(ForkSessionMsg)
+	if !ok {
+		t.Fatalf("expected ForkSessionMsg, got %T", msg)
+	}
+	if fm.CWD != "/work/repo" {
+		t.Errorf("CWD = %q, want /work/repo", fm.CWD)
+	}
+	if fm.Subject != "original subject" {
+		t.Errorf("Subject = %q, want %q", fm.Subject, "original subject")
+	}
+	if fm.Tags != "urgent backend" {
+		t.Errorf("Tags = %q, want %q", fm.Tags, "urgent backend")
+	}
+}
+
+func TestForkOnMenuItemIsNoOp(t *testing.T) {
+	d := setup(t)
+	seedSession(t, d, "s1", "/w")
+	m := New(d)
+	// Move cursor onto first menu item (past the one session).
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	// Should be at the first menu action now; f should do nothing.
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
+	if cmd != nil {
+		t.Errorf("f on a menu item should be a no-op, got cmd")
+	}
+}
+
 // ─── Async usage banner ─────────────────────────────────────────────
 
 func TestInitReturnsCmdForUsageCompute(t *testing.T) {

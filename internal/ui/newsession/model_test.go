@@ -231,6 +231,31 @@ func TestSessionFinished_DetectsUpdateForExistingSID(t *testing.T) {
 	}
 }
 
+// ─── Fork constructor ───────────────────────────────────────────────
+
+func TestNewForFork_PrefillsSubjectAndTags(t *testing.T) {
+	d, _ := setup(t)
+	m := NewForFork(d, "/work/repo", "carried subject", "tag1 tag2")
+	if m.step != stepLaunching {
+		t.Errorf("step = %v, want stepLaunching", m.step)
+	}
+	if m.targetDir != "/work/repo" {
+		t.Errorf("targetDir = %q, want /work/repo", m.targetDir)
+	}
+	if m.presetSubject != "carried subject" {
+		t.Errorf("presetSubject = %q, want %q", m.presetSubject, "carried subject")
+	}
+	if m.chosenTags != "tag1 tag2" {
+		t.Errorf("chosenTags = %q, want %q", m.chosenTags, "tag1 tag2")
+	}
+	if m.isUpdate {
+		t.Error("fork must NOT be flagged as update — new SID will be assigned")
+	}
+	if m.existingSession != nil {
+		t.Error("fork must not pre-load an existingSession — it's a brand-new session")
+	}
+}
+
 func TestSessionFinished_AutoSubjectFallsBackToDirName(t *testing.T) {
 	d, _ := setup(t)
 	// Hook returns no subject — model should auto-build one from dir.
