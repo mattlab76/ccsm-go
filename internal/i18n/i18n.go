@@ -128,14 +128,15 @@ var langEN = map[string]string{
 	"delete_done":    "Session deleted.",
 
 	// Startup check (invalid sessions)
-	"startup_title":   "Session Health Check",
-	"startup_summary": "%d session(s) are expired at Claude Code (transcript gone).",
-	"startup_explain": "These sessions cannot be resumed anymore.",
-	"startup_more":    "... and %d more",
-	"startup_purge":   "Purge all (delete from ccsm)",
-	"startup_dismiss": "Dismiss all (keep, don't ask again)",
-	"startup_skip":    "Skip for now (ask again next start)",
-	"startup_hint":    "Choose [p] / [d] / [s]  ·  Esc/Enter = skip",
+	"startup_title":                 "Session Health Check",
+	"startup_summary":               "%d session(s) can no longer be resumed:",
+	"startup_breakdown_expired":     "%d expired (transcript deleted at Claude Code)",
+	"startup_breakdown_missing_dir": "%d with missing working directory (deleted locally)",
+	"startup_more":                  "... and %d more",
+	"startup_purge":                 "Purge all (delete from ccsm)",
+	"startup_dismiss":               "Dismiss all (keep, don't ask again)",
+	"startup_skip":                  "Skip for now (ask again next start)",
+	"startup_hint":                  "↑/↓ navigate  Enter activate  p/d/s shortcut  Esc skip",
 
 	// Cleanup
 	"cleanup_title":         "Old Sessions (>%d days)",
@@ -277,14 +278,15 @@ var langDE = map[string]string{
 	"delete_done":    "Session gelöscht.",
 
 	// Startup check (invalid sessions)
-	"startup_title":   "Session-Prüfung",
-	"startup_summary": "%d Session(s) sind bei Claude Code abgelaufen (Transcript fehlt).",
-	"startup_explain": "Diese Sessions können nicht mehr fortgesetzt werden.",
-	"startup_more":    "... und %d weitere",
-	"startup_purge":   "Alle löschen (aus ccsm entfernen)",
-	"startup_dismiss": "Alle ignorieren (behalten, nicht mehr fragen)",
-	"startup_skip":    "Vorerst überspringen (beim nächsten Start wieder fragen)",
-	"startup_hint":    "Wähle [p] / [d] / [s]  ·  Esc/Enter = überspringen",
+	"startup_title":                 "Session-Prüfung",
+	"startup_summary":               "%d Session(s) können nicht mehr fortgesetzt werden:",
+	"startup_breakdown_expired":     "%d abgelaufen (Transcript bei Claude Code gelöscht)",
+	"startup_breakdown_missing_dir": "%d mit fehlendem Arbeitsverzeichnis (lokal gelöscht)",
+	"startup_more":                  "... und %d weitere",
+	"startup_purge":                 "Alle löschen (aus ccsm entfernen)",
+	"startup_dismiss":               "Alle ignorieren (behalten, nicht mehr fragen)",
+	"startup_skip":                  "Vorerst überspringen (beim nächsten Start wieder fragen)",
+	"startup_hint":                  "↑/↓ navigieren  Enter ausführen  p/d/s Shortcut  Esc überspringen",
 
 	// Cleanup
 	"cleanup_title":         "Alte Sessions (>%d Tage)",

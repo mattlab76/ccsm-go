@@ -35,9 +35,36 @@ type Model struct {
 	width    int
 	height   int
 	state    state
-	cursor   int            // 0-based cursor position
-	marked   map[int]bool   // marked for deletion (0-based indices)
+	cursor   int          // 0-based cursor position
+	offset   int          // index of the first row currently visible
+	marked   map[int]bool // marked for deletion (0-based indices)
 	message  string
+}
+
+// visibleRows returns how many table rows fit on screen.
+// Mirrors browser.visibleRows so both lists behave consistently.
+func (m Model) visibleRows() int {
+	// Reserve lines for: logo(3) + separator(1) + controls(4) + table header(3) +
+	// bottom border(1) + legend(1) + scroll indicator(1) + status bar(2) + padding(2)
+	available := m.height - 18
+	if available < 3 {
+		available = 3
+	}
+	return available
+}
+
+// scrollIntoView adjusts m.offset so that m.cursor is visible.
+func (m *Model) scrollIntoView() {
+	vis := m.visibleRows()
+	if m.cursor < m.offset {
+		m.offset = m.cursor
+	}
+	if m.cursor >= m.offset+vis {
+		m.offset = m.cursor - vis + 1
+	}
+	if m.offset < 0 {
+		m.offset = 0
+	}
 }
 
 // New creates a new delete model.
@@ -111,12 +138,38 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			if m.cursor > 0 {
 				m.cursor--
 				m.updateSelection()
+				m.scrollIntoView()
 			}
 		case "down", "j":
 			if m.cursor < len(m.rows)-1 {
 				m.cursor++
 				m.updateSelection()
+				m.scrollIntoView()
 			}
+		case "home", "g":
+			m.cursor = 0
+			m.offset = 0
+			m.updateSelection()
+		case "end", "G":
+			m.cursor = len(m.rows) - 1
+			m.updateSelection()
+			m.scrollIntoView()
+		case "pgup":
+			vis := m.visibleRows()
+			m.cursor -= vis
+			if m.cursor < 0 {
+				m.cursor = 0
+			}
+			m.updateSelection()
+			m.scrollIntoView()
+		case "pgdown":
+			vis := m.visibleRows()
+			m.cursor += vis
+			if m.cursor >= len(m.rows) {
+				m.cursor = len(m.rows) - 1
+			}
+			m.updateSelection()
+			m.scrollIntoView()
 		case " ": // Space toggles mark
 			if m.cursor >= 0 && m.cursor < len(m.sessions) {
 				if m.marked[m.cursor] {
@@ -125,6 +178,14 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 					m.marked[m.cursor] = true
 				}
 			}
+		case "a":
+			// Toggle-mark all expired sessions ([!]).
+			m.toggleMarkBy(func(r components.TableRow) bool {
+				return r.Status == components.StatusExpired
+			})
+		case "A":
+			// Toggle-mark every visible session.
+			m.toggleMarkBy(func(r components.TableRow) bool { return true })
 		case "enter":
 			if len(m.marked) == 0 {
 				// If nothing marked, mark current cursor position.
@@ -153,6 +214,35 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+// toggleMarkBy marks every row matching pred. If every matching row is
+// already marked, it unmarks them all instead — so pressing the hotkey
+// twice acts like an undo.
+func (m *Model) toggleMarkBy(pred func(components.TableRow) bool) {
+	var matches []int
+	for i, r := range m.rows {
+		if pred(r) {
+			matches = append(matches, i)
+		}
+	}
+	if len(matches) == 0 {
+		return
+	}
+	allMarked := true
+	for _, i := range matches {
+		if !m.marked[i] {
+			allMarked = false
+			break
+		}
+	}
+	for _, i := range matches {
+		if allMarked {
+			delete(m.marked, i)
+		} else {
+			m.marked[i] = true
+		}
+	}
 }
 
 func (m Model) doDelete() (Model, tea.Cmd) {
@@ -217,13 +307,20 @@ func (m Model) View() string {
 		if markedCount > 0 {
 			b.WriteString(fmt.Sprintf("  "+styles.Red.Render("%d marked for deletion")+"\n", markedCount))
 		}
-		b.WriteString("  " + styles.Dim.Render("↑/↓ navigate  Space mark  Enter delete marked  q back") + "\n\n")
+		b.WriteString("  " + styles.Dim.Render("↑/↓ navigate  Space mark  a all expired  A all  Enter delete  q back") + "\n\n")
 
 	case stateConfirm:
 		b.WriteString("  " + styles.Red.Render(fmt.Sprintf("Delete %d session(s)?", len(m.marked))) + "\n")
+		shown := 0
 		for idx := range m.marked {
 			if idx < len(m.sessions) {
+				if shown >= 10 {
+					b.WriteString(fmt.Sprintf("    %s\n",
+						styles.Dim.Render(fmt.Sprintf("... and %d more", len(m.marked)-shown))))
+					break
+				}
 				b.WriteString("    " + styles.Red.Render("✗ "+m.sessions[idx].Subject) + "\n")
+				shown++
 			}
 		}
 		b.WriteString("\n  " + i18n.T("delete_confirm") + " [" + i18n.ConfirmPrompt() + "] \n\n")
@@ -235,13 +332,18 @@ func (m Model) View() string {
 		b.WriteString("  " + styles.Dim.Render(i18n.T("press_q")) + "\n\n")
 	}
 
-	// Render table with marked rows indicated.
-	displayRows := make([]components.TableRow, len(m.rows))
-	copy(displayRows, m.rows)
-	for i := range displayRows {
+	// Slice rows to the visible window. Apply the ✗ prefix only to the
+	// rows we'll actually render.
+	vis := m.visibleRows()
+	end := m.offset + vis
+	if end > len(m.rows) {
+		end = len(m.rows)
+	}
+	displayRows := make([]components.TableRow, end-m.offset)
+	for i := m.offset; i < end; i++ {
+		displayRows[i-m.offset] = m.rows[i]
 		if m.marked[i] {
-			// Prefix subject with ✗ to show marked for deletion.
-			displayRows[i].Session.Subject = "✗ " + displayRows[i].Session.Subject
+			displayRows[i-m.offset].Session.Subject = "✗ " + m.rows[i].Session.Subject
 		}
 	}
 
@@ -252,6 +354,10 @@ func (m Model) View() string {
 	legend := components.RenderLegend(m.rows)
 	if legend != "" {
 		b.WriteString(legend + "\n")
+	}
+	if len(m.rows) > vis {
+		b.WriteString(fmt.Sprintf("  "+styles.Dim.Render("(%d-%d of %d)")+"\n",
+			m.offset+1, end, len(m.rows)))
 	}
 
 	return b.String()

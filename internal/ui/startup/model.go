@@ -1,12 +1,16 @@
 // Package startup renders the startup-time check for invalid sessions.
-// When ccsm boots, it scans for sessions whose JSONL transcript has been
-// deleted at the Claude Code side (expired) and which the user has not
-// previously dismissed. If any are found, this view is shown before the
-// main menu so the user can purge or dismiss them in one go.
+// When ccsm boots, it scans for sessions that can no longer be used:
+//   - expired sessions whose JSONL transcript has been deleted at the
+//     Claude Code side
+//   - sessions whose working directory has been deleted locally
+// Sessions the user has previously dismissed are skipped. If any remain,
+// this view is shown before the main menu so the user can purge or
+// dismiss them in one go.
 package startup
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -23,32 +27,56 @@ type SwitchViewMsg struct {
 	View int
 }
 
-// Model holds the expired sessions and the user's pending choice.
-type Model struct {
-	db      *db.DB
-	expired []model.Session
-	width   int
-	height  int
-	message string
-	done    bool
+// reason classifies why a session is unusable.
+type reason int
+
+const (
+	reasonExpired    reason = iota // JSONL transcript gone at Claude Code
+	reasonMissingDir               // working directory deleted locally
+)
+
+// invalidEntry pairs a session with the reason it can't be used anymore.
+type invalidEntry struct {
+	session model.Session
+	reason  reason
 }
 
-// New builds a startup model and loads expired, non-dismissed sessions.
+// Model holds the invalid sessions and the user's pending choice.
+type Model struct {
+	db      *db.DB
+	invalid []invalidEntry
+	cursor  int // 0=purge, 1=dismiss, 2=skip
+	width   int
+	height  int
+}
+
+// Action positions for the cursor.
+const (
+	actionPurge   = 0
+	actionDismiss = 1
+	actionSkip    = 2
+	actionCount   = 3
+)
+
+// New builds a startup model and loads invalid, non-dismissed sessions.
+// Cursor defaults to "skip" — the safest action if the user just hits Enter.
 func New(database *db.DB) Model {
-	m := Model{db: database, width: 100}
-	m.expired = loadExpired(database)
+	m := Model{db: database, width: 100, cursor: actionSkip}
+	m.invalid = loadInvalid(database)
 	return m
 }
 
 // HasWork reports whether the startup view has anything to show.
 // The app uses this to decide whether to open the view at all.
 func (m Model) HasWork() bool {
-	return len(m.expired) > 0
+	return len(m.invalid) > 0
 }
 
-// loadExpired returns sessions whose Claude Code transcript is gone
-// and which are not already in the dismissed list.
-func loadExpired(database *db.DB) []model.Session {
+// loadInvalid returns every non-dismissed session that is either expired
+// at Claude Code or whose working directory no longer exists locally.
+// Expired wins when both conditions apply, because that's the harder
+// failure (can't resume regardless of where you launch from).
+func loadInvalid(database *db.DB) []invalidEntry {
 	sessions, err := db.ListSessions(database, 0)
 	if err != nil {
 		return nil
@@ -58,16 +86,24 @@ func loadExpired(database *db.DB) []model.Session {
 	for _, sid := range dismissed {
 		dismissedSet[sid] = true
 	}
-	var out []model.Session
+	var out []invalidEntry
 	for _, s := range sessions {
 		if dismissedSet[s.SID] {
 			continue
 		}
-		if !claude.IsSessionValid(s.SID) {
-			out = append(out, s)
+		switch {
+		case !claude.IsSessionValid(s.SID):
+			out = append(out, invalidEntry{s, reasonExpired})
+		case !dirExists(s.CWD):
+			out = append(out, invalidEntry{s, reasonMissingDir})
 		}
 	}
 	return out
+}
+
+func dirExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
 }
 
 func (m Model) SetSize(width, height int) Model {
@@ -91,38 +127,72 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case "ctrl+c":
 		return m, tea.Quit
 
+	case "up", "k":
+		if m.cursor > 0 {
+			m.cursor--
+		}
+		return m, nil
+
+	case "down", "j":
+		if m.cursor < actionCount-1 {
+			m.cursor++
+		}
+		return m, nil
+
+	case "home", "g":
+		m.cursor = 0
+		return m, nil
+
+	case "end", "G":
+		m.cursor = actionCount - 1
+		return m, nil
+
+	case "enter":
+		return m, m.activate(m.cursor)
+
 	case "p":
-		return m, m.purge()
+		return m, m.activate(actionPurge)
 
 	case "d":
-		return m, m.dismiss()
+		return m, m.activate(actionDismiss)
 
-	case "s", "esc", "enter", "q":
-		return m, finish()
+	case "s", "esc", "q":
+		return m, m.activate(actionSkip)
 	}
 	return m, nil
 }
 
-// purge deletes all expired sessions from the database.
-func (m Model) purge() tea.Cmd {
-	sids := make([]string, 0, len(m.expired))
-	for _, s := range m.expired {
-		sids = append(sids, s.SID)
-	}
-	if err := db.DeleteSessions(m.db, sids); err == nil {
-		db.LogAction(m.db, model.ActionDelete,
-			fmt.Sprintf("startup purge: %d expired session(s)", len(sids)))
+// activate runs the action at the given position.
+func (m Model) activate(action int) tea.Cmd {
+	switch action {
+	case actionPurge:
+		return m.purge()
+	case actionDismiss:
+		return m.dismiss()
 	}
 	return finish()
 }
 
-// dismiss marks all expired sessions so they won't be reported on next start.
+// purge deletes all invalid sessions from the database.
+func (m Model) purge() tea.Cmd {
+	sids := make([]string, 0, len(m.invalid))
+	for _, e := range m.invalid {
+		sids = append(sids, e.session.SID)
+	}
+	if err := db.DeleteSessions(m.db, sids); err == nil {
+		db.LogAction(m.db, model.ActionDelete,
+			fmt.Sprintf("startup purge: %d invalid session(s)", len(sids)))
+	}
+	return finish()
+}
+
+// dismiss marks all invalid sessions so they won't be reported on next start.
 func (m Model) dismiss() tea.Cmd {
-	for _, s := range m.expired {
-		_ = db.AddDismissed(m.db, s.SID)
+	for _, e := range m.invalid {
+		_ = db.AddDismissed(m.db, e.session.SID)
 	}
 	db.LogAction(m.db, model.ActionSettings,
-		fmt.Sprintf("startup dismiss: %d expired session(s)", len(m.expired)))
+		fmt.Sprintf("startup dismiss: %d invalid session(s)", len(m.invalid)))
 	return finish()
 }
 
@@ -136,7 +206,9 @@ func finish() tea.Cmd {
 func (m Model) View() string {
 	var b strings.Builder
 
-	count := len(m.expired)
+	count := len(m.invalid)
+	expiredCount, missingCount := m.countByReason()
+
 	b.WriteString("\n")
 	b.WriteString("  " + styles.RenderLogo(i18n.T("startup_title"), count))
 	b.WriteString("\n\n")
@@ -153,7 +225,17 @@ func (m Model) View() string {
 	b.WriteString("\n\n")
 
 	b.WriteString("  " + styles.Amber.Render(fmt.Sprintf(i18n.T("startup_summary"), count)) + "\n")
-	b.WriteString("  " + styles.Dim.Render(i18n.T("startup_explain")) + "\n\n")
+	if expiredCount > 0 {
+		b.WriteString(fmt.Sprintf("    %s %s\n",
+			styles.Red.Render("[!]"),
+			styles.Dim.Render(fmt.Sprintf(i18n.T("startup_breakdown_expired"), expiredCount))))
+	}
+	if missingCount > 0 {
+		b.WriteString(fmt.Sprintf("    %s %s\n",
+			styles.Amber.Render("[?]"),
+			styles.Dim.Render(fmt.Sprintf(i18n.T("startup_breakdown_missing_dir"), missingCount))))
+	}
+	b.WriteString("\n")
 
 	// Show up to 10 sessions inline; collapse the rest into a counter.
 	const maxShow = 10
@@ -162,15 +244,24 @@ func (m Model) View() string {
 		shown = maxShow
 	}
 	for i := 0; i < shown; i++ {
-		s := m.expired[i]
-		date := s.CreatedAt.Format("2006-01-02")
-		subj := s.Subject
+		e := m.invalid[i]
+		date := e.session.CreatedAt.Format("2006-01-02")
+		subj := e.session.Subject
 		if len([]rune(subj)) > 50 {
 			subj = string([]rune(subj)[:48]) + ".."
 		}
-		b.WriteString(fmt.Sprintf("    %s  %s\n",
+		var marker, line string
+		if e.reason == reasonExpired {
+			marker = styles.Red.Render("[!]")
+			line = styles.Red.Render(subj)
+		} else {
+			marker = styles.Amber.Render("[?]")
+			line = styles.Amber.Render(subj)
+		}
+		b.WriteString(fmt.Sprintf("    %s %s  %s\n",
+			marker,
 			styles.Dim.Render(date),
-			styles.Red.Render(subj)))
+			line))
 	}
 	if count > maxShow {
 		b.WriteString(fmt.Sprintf("    %s\n",
@@ -178,15 +269,31 @@ func (m Model) View() string {
 	}
 	b.WriteString("\n")
 
-	b.WriteString("  " + actionLine("p", i18n.T("startup_purge"), styles.Red))
-	b.WriteString("  " + actionLine("d", i18n.T("startup_dismiss"), styles.Amber))
-	b.WriteString("  " + actionLine("s", i18n.T("startup_skip"), styles.Green))
+	b.WriteString(actionLine("p", i18n.T("startup_purge"), styles.Red, m.cursor == actionPurge))
+	b.WriteString(actionLine("d", i18n.T("startup_dismiss"), styles.Amber, m.cursor == actionDismiss))
+	b.WriteString(actionLine("s", i18n.T("startup_skip"), styles.Green, m.cursor == actionSkip))
 	b.WriteString("\n")
 	b.WriteString("  " + styles.Dim.Render(i18n.T("startup_hint")) + "\n")
 
 	return b.String()
 }
 
-func actionLine(key, label string, color lipgloss.Style) string {
-	return fmt.Sprintf("%s %s\n", color.Render("["+key+"]"), label)
+func (m Model) countByReason() (expired, missing int) {
+	for _, e := range m.invalid {
+		switch e.reason {
+		case reasonExpired:
+			expired++
+		case reasonMissingDir:
+			missing++
+		}
+	}
+	return
+}
+
+func actionLine(key, label string, color lipgloss.Style, selected bool) string {
+	prefix := "  "
+	if selected {
+		prefix = styles.Violet.Render("▶ ")
+	}
+	return fmt.Sprintf("%s%s %s\n", prefix, color.Render("["+key+"]"), label)
 }

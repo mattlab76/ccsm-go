@@ -238,7 +238,7 @@ func (m Model) View() string {
 		hints = components.StatusBarItems("↑↓", "navigate", "Enter", "resume", "/", "search", "q", "back")
 	case ViewDelete:
 		content = m.deleteView.View()
-		hints = components.StatusBarItems("↑↓", "navigate", "Space", "mark", "Enter", "delete", "q", "back")
+		hints = components.StatusBarItems("↑↓", "nav", "Space", "mark", "a", "all expired", "A", "all", "Enter", "delete", "q", "back")
 	case ViewStats:
 		content = m.statsView.View()
 		hints = components.StatusBarItems("↑↓", "scroll", "q", "back")
@@ -250,7 +250,7 @@ func (m Model) View() string {
 		hints = components.StatusBarItems("1-3", "edit", "q", "back")
 	case ViewStartupCheck:
 		content = m.startupView.View()
-		hints = components.StatusBarItems("p", "purge", "d", "dismiss", "s/Esc", "skip")
+		hints = components.StatusBarItems("↑↓", "nav", "Enter", "activate", "p", "purge", "d", "dismiss", "s/Esc", "skip")
 	}
 
 	return content + "\n" + components.StatusBar(hints, m.width)

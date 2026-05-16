@@ -68,13 +68,25 @@ func SaveSession(db *DB, s *model.Session) error {
 	return err
 }
 
-// DeleteSession removes a session by SID.
+// DeleteSession removes a session by SID. Any matching dismissed-list
+// entry is removed too, so it can't outlive the session and become stale.
 func DeleteSession(db *DB, sid string) error {
-	_, err := db.Exec("DELETE FROM sessions WHERE sid = ?", sid)
-	return err
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec("DELETE FROM sessions WHERE sid = ?", sid); err != nil {
+		return err
+	}
+	if _, err := tx.Exec("DELETE FROM dismissed WHERE sid = ?", sid); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
-// DeleteSessions removes multiple sessions by SID.
+// DeleteSessions removes multiple sessions by SID, and prunes any
+// matching dismissed-list entries in the same transaction.
 func DeleteSessions(db *DB, sids []string) error {
 	tx, err := db.Begin()
 	if err != nil {
@@ -83,6 +95,9 @@ func DeleteSessions(db *DB, sids []string) error {
 	defer tx.Rollback()
 	for _, sid := range sids {
 		if _, err := tx.Exec("DELETE FROM sessions WHERE sid = ?", sid); err != nil {
+			return err
+		}
+		if _, err := tx.Exec("DELETE FROM dismissed WHERE sid = ?", sid); err != nil {
 			return err
 		}
 	}
