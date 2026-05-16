@@ -100,11 +100,6 @@ var langEN = map[string]string{
 	"new_dir_enter_or_q": "Enter path (q=cancel):",
 	"new_dir_not_found": "Directory not found. Create it?",
 	"new_dir_created":   "Directory created.",
-	"msg_switching":     "Switching to",
-	"msg_resuming":      "Resuming session",
-
-	// Errors
-	"err_no_claude": "Error: Claude Code is not installed or not in PATH.",
 
 	// Sessions
 	"sessions_none": "No saved sessions.",
@@ -138,9 +133,10 @@ var langEN = map[string]string{
 
 	// Startup check (invalid sessions)
 	"startup_title":                 "Session Health Check",
-	"startup_summary":               "%d session(s) can no longer be resumed:",
+	"startup_summary":               "%d session(s) flagged for your attention:",
 	"startup_breakdown_expired":     "%d expired (transcript deleted at Claude Code)",
 	"startup_breakdown_missing_dir": "%d with missing working directory (deleted locally)",
+	"startup_breakdown_too_old":     "%d older than your cleanup threshold (still usable)",
 	"startup_more":                  "... and %d more",
 	"startup_purge":                 "Purge all (delete from ccsm)",
 	"startup_dismiss":               "Dismiss all (keep, don't ask again)",
@@ -148,15 +144,12 @@ var langEN = map[string]string{
 	"startup_hint":                  "↑/↓ navigate  Enter activate  p/d/s shortcut  Esc skip",
 
 	// Cleanup
-	"cleanup_title":         "Old Sessions (>%d days)",
-	"cleanup_done":          "%d session(s) deleted.",
-	"cleanup_select_prompt": "Enter numbers to delete (comma-separated, e.g. 1,3) or [q] to skip:",
+	"cleanup_title": "Old Sessions (>%d days)",
 
 	// Search
-	"search_title":       "Search Sessions",
-	"search_prompt":      "Search term",
-	"search_no_results":  "No matches found.",
-	"search_no_sessions": "No sessions available.",
+	"search_title":      "Search Sessions",
+	"search_prompt":     "Search term",
+	"search_no_results": "No matches found.",
 
 	// Statistics
 	"stats_title":         "Statistics",
@@ -209,36 +202,15 @@ var langEN = map[string]string{
 	"log_title":  "Activity Log",
 	"log_empty":  "No log entries.",
 
-	// Directory issues
-	"dir_missing":        "Directory no longer exists",
-	"dir_recreate":       "Recreate directory and continue",
-	"dir_delete_session": "Delete this session",
-	"dir_cancel_back":    "Back to main menu",
-
-	// Session issues
-	"session_not_found":  "Session no longer exists at Claude Code.",
-	"session_restart_new": "Start new session (same directory and subject)",
-
-	// Startup validation
-	"expired_warning":     "%d session(s) no longer valid at Claude Code",
-	"expired_purge":       "Remove invalid sessions now?",
-	"expired_purged":      "Invalid sessions removed.",
-	"missing_dir_warning": "%d session(s) with deleted working directory",
-
 	// Legend
 	"legend_expired":     "[!] = session expired at Claude Code",
 	"legend_missing_dir": "[?] = working directory deleted",
-
-	// Confirmation
-	"confirm_yes": "y",
 
 	// Table headers
 	"header_nr":      "#",
 	"header_subject": "Subject",
 	"header_dir":     "Directory",
 	"header_date":    "Date",
-	"header_tags":    "Tags",
-	"header_tokens":  "Tokens",
 	"header_in":      "In",
 	"header_out":     "Out",
 
@@ -273,11 +245,6 @@ var langDE = map[string]string{
 	"new_dir_enter_or_q": "Pfad eingeben (q=Abbrechen):",
 	"new_dir_not_found": "Verzeichnis nicht gefunden. Anlegen?",
 	"new_dir_created":   "Verzeichnis angelegt.",
-	"msg_switching":     "Wechsle nach",
-	"msg_resuming":      "Setze Session fort",
-
-	// Errors
-	"err_no_claude": "Fehler: Claude Code ist nicht installiert oder nicht im PATH.",
 
 	// Sessions
 	"sessions_none": "Keine gespeicherten Sessions.",
@@ -311,9 +278,10 @@ var langDE = map[string]string{
 
 	// Startup check (invalid sessions)
 	"startup_title":                 "Session-Prüfung",
-	"startup_summary":               "%d Session(s) können nicht mehr fortgesetzt werden:",
+	"startup_summary":               "%d Session(s) benötigen deine Aufmerksamkeit:",
 	"startup_breakdown_expired":     "%d abgelaufen (Transcript bei Claude Code gelöscht)",
 	"startup_breakdown_missing_dir": "%d mit fehlendem Arbeitsverzeichnis (lokal gelöscht)",
+	"startup_breakdown_too_old":     "%d älter als dein Cleanup-Limit (noch nutzbar)",
 	"startup_more":                  "... und %d weitere",
 	"startup_purge":                 "Alle löschen (aus ccsm entfernen)",
 	"startup_dismiss":               "Alle ignorieren (behalten, nicht mehr fragen)",
@@ -321,15 +289,12 @@ var langDE = map[string]string{
 	"startup_hint":                  "↑/↓ navigieren  Enter ausführen  p/d/s Shortcut  Esc überspringen",
 
 	// Cleanup
-	"cleanup_title":         "Alte Sessions (>%d Tage)",
-	"cleanup_done":          "%d Session(s) gelöscht.",
-	"cleanup_select_prompt": "Nummern zum Löschen eingeben (kommagetrennt, z.B. 1,3) oder [q] zum Überspringen:",
+	"cleanup_title": "Alte Sessions (>%d Tage)",
 
 	// Search
-	"search_title":       "Sessions suchen",
-	"search_prompt":      "Suchbegriff",
-	"search_no_results":  "Keine Treffer.",
-	"search_no_sessions": "Keine Sessions vorhanden.",
+	"search_title":      "Sessions suchen",
+	"search_prompt":     "Suchbegriff",
+	"search_no_results": "Keine Treffer.",
 
 	// Statistics
 	"stats_title":         "Statistiken",
@@ -382,36 +347,15 @@ var langDE = map[string]string{
 	"log_title":  "Aktivitätslog",
 	"log_empty":  "Keine Log-Einträge.",
 
-	// Directory issues
-	"dir_missing":        "Verzeichnis existiert nicht mehr",
-	"dir_recreate":       "Verzeichnis neu anlegen und fortfahren",
-	"dir_delete_session": "Diese Session löschen",
-	"dir_cancel_back":    "Zurück zum Hauptmenü",
-
-	// Session issues
-	"session_not_found":  "Session existiert bei Claude Code nicht mehr.",
-	"session_restart_new": "Neue Session starten (gleiches Verzeichnis und Betreff)",
-
-	// Startup validation
-	"expired_warning":     "%d Session(s) bei Claude Code nicht mehr gültig",
-	"expired_purge":       "Ungültige Sessions jetzt entfernen?",
-	"expired_purged":      "Ungültige Sessions entfernt.",
-	"missing_dir_warning": "%d Session(s) mit gelöschtem Arbeitsverzeichnis",
-
 	// Legend
 	"legend_expired":     "[!] = Session bei Claude Code abgelaufen",
 	"legend_missing_dir": "[?] = Arbeitsverzeichnis gelöscht",
-
-	// Confirmation
-	"confirm_yes": "j",
 
 	// Table headers
 	"header_nr":      "#",
 	"header_subject": "Betreff",
 	"header_dir":     "Verzeichnis",
 	"header_date":    "Datum",
-	"header_tags":    "Tags",
-	"header_tokens":  "Tokens",
 	"header_in":      "In",
 	"header_out":     "Out",
 

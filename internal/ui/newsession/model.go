@@ -137,11 +137,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 
 func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	key := msg.String()
-
-	// Global escape: q in confirm steps, ctrl+c always
-	if key == "ctrl+c" {
-		return m, tea.Quit
-	}
+	// Ctrl+C is intercepted globally at app level (quit-confirm modal).
 
 	switch m.step {
 	case stepSubject:

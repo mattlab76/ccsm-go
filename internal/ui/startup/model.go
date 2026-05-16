@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 	tea "github.com/charmbracelet/bubbletea"
@@ -27,12 +28,13 @@ type SwitchViewMsg struct {
 	View int
 }
 
-// reason classifies why a session is unusable.
+// reason classifies why a session shows up in the health check.
 type reason int
 
 const (
 	reasonExpired    reason = iota // JSONL transcript gone at Claude Code
 	reasonMissingDir               // working directory deleted locally
+	reasonTooOld                   // older than Settings.CleanupDays (still usable)
 )
 
 // invalidEntry pairs a session with the reason it can't be used anymore.
@@ -72,10 +74,10 @@ func (m Model) HasWork() bool {
 	return len(m.invalid) > 0
 }
 
-// loadInvalid returns every non-dismissed session that is either expired
-// at Claude Code or whose working directory no longer exists locally.
-// Expired wins when both conditions apply, because that's the harder
-// failure (can't resume regardless of where you launch from).
+// loadInvalid returns every non-dismissed session that either can't be
+// resumed (expired transcript / missing dir) or is older than the
+// configured cleanup_days threshold. Priority order: expired > missing
+// dir > too old (the harder failure wins when multiple apply).
 func loadInvalid(database *db.DB) []invalidEntry {
 	sessions, err := db.ListSessions(database, 0)
 	if err != nil {
@@ -85,6 +87,12 @@ func loadInvalid(database *db.DB) []invalidEntry {
 	dismissedSet := make(map[string]bool, len(dismissed))
 	for _, sid := range dismissed {
 		dismissedSet[sid] = true
+	}
+	// Read cleanup_days threshold from settings; 0 disables the age check.
+	settings, _ := db.GetSettings(database)
+	var cutoff time.Time
+	if settings != nil && settings.CleanupDays > 0 {
+		cutoff = time.Now().AddDate(0, 0, -settings.CleanupDays)
 	}
 	var out []invalidEntry
 	for _, s := range sessions {
@@ -96,6 +104,8 @@ func loadInvalid(database *db.DB) []invalidEntry {
 			out = append(out, invalidEntry{s, reasonExpired})
 		case !dirExists(s.CWD):
 			out = append(out, invalidEntry{s, reasonMissingDir})
+		case !cutoff.IsZero() && s.CreatedAt.Before(cutoff):
+			out = append(out, invalidEntry{s, reasonTooOld})
 		}
 	}
 	return out
@@ -122,11 +132,9 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		return m, nil
 	}
 	key := strings.ToLower(keyMsg.String())
+	// Ctrl+C is intercepted globally at app level (quit-confirm modal).
 
 	switch key {
-	case "ctrl+c":
-		return m, tea.Quit
-
 	case "up", "k":
 		if m.cursor > 0 {
 			m.cursor--
@@ -207,7 +215,7 @@ func (m Model) View() string {
 	var b strings.Builder
 
 	count := len(m.invalid)
-	expiredCount, missingCount := m.countByReason()
+	expiredCount, missingCount, oldCount := m.countByReason()
 
 	b.WriteString("\n")
 	b.WriteString("  " + styles.RenderLogo(i18n.T("startup_title"), count))
@@ -235,6 +243,11 @@ func (m Model) View() string {
 			styles.Amber.Render("[?]"),
 			styles.Dim.Render(fmt.Sprintf(i18n.T("startup_breakdown_missing_dir"), missingCount))))
 	}
+	if oldCount > 0 {
+		b.WriteString(fmt.Sprintf("    %s %s\n",
+			styles.Dim.Render("[⌛]"),
+			styles.Dim.Render(fmt.Sprintf(i18n.T("startup_breakdown_too_old"), oldCount))))
+	}
 	b.WriteString("\n")
 
 	// Show up to 10 sessions inline; collapse the rest into a counter.
@@ -251,12 +264,16 @@ func (m Model) View() string {
 			subj = string([]rune(subj)[:48]) + ".."
 		}
 		var marker, line string
-		if e.reason == reasonExpired {
+		switch e.reason {
+		case reasonExpired:
 			marker = styles.Red.Render("[!]")
 			line = styles.Red.Render(subj)
-		} else {
+		case reasonMissingDir:
 			marker = styles.Amber.Render("[?]")
 			line = styles.Amber.Render(subj)
+		case reasonTooOld:
+			marker = styles.Dim.Render("[⌛]")
+			line = styles.Dim.Render(subj)
 		}
 		b.WriteString(fmt.Sprintf("    %s %s  %s\n",
 			marker,
@@ -278,13 +295,15 @@ func (m Model) View() string {
 	return b.String()
 }
 
-func (m Model) countByReason() (expired, missing int) {
+func (m Model) countByReason() (expired, missing, old int) {
 	for _, e := range m.invalid {
 		switch e.reason {
 		case reasonExpired:
 			expired++
 		case reasonMissingDir:
 			missing++
+		case reasonTooOld:
+			old++
 		}
 	}
 	return

@@ -464,8 +464,6 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			if m.scroll > m.maxScroll() {
 				m.scroll = m.maxScroll()
 			}
-		case "ctrl+c":
-			return m, tea.Quit
 		}
 	}
 	return m, nil
