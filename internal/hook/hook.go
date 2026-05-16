@@ -15,6 +15,15 @@ import (
 // t.TempDir() and not touch the real /tmp/ccsm.
 var tmpDir = "/tmp/ccsm"
 
+// SetTmpDirForTest redirects the spool path used by all hook functions
+// to dir. Intended for use from _test.go files in other packages that
+// want to stage realistic hook output without touching /tmp/ccsm.
+func SetTmpDirForTest(dir string) { tmpDir = dir }
+
+// TmpDirForTest returns the current spool path so tests can write files
+// directly into it.
+func TmpDirForTest() string { return tmpDir }
+
 // HookData holds the session metadata written by the hook script.
 type HookData struct {
 	SessionID    string `json:"session_id"`
