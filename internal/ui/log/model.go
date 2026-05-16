@@ -17,13 +17,18 @@ type SwitchViewMsg struct {
 }
 
 // Model is the activity log view.
+//
+// Output is split into a fixed sticky header (logo + separator) and a
+// body that scrolls. Keeps the title anchored while paging through
+// long log histories.
 type Model struct {
-	db           *db.DB
-	entries      []model.LogEntry
-	width        int
-	height       int
-	scroll       int
-	contentLines []string
+	db          *db.DB
+	entries     []model.LogEntry
+	width       int
+	height      int
+	scroll      int
+	headerLines []string
+	bodyLines   []string
 }
 
 // New creates a new activity log model.
@@ -39,8 +44,7 @@ func (m *Model) load() {
 }
 
 func (m *Model) buildContent() {
-	var lines []string
-	add := func(s string) { lines = append(lines, s) }
+	var header, lines []string
 
 	w := m.width
 	if w < 60 {
@@ -51,12 +55,19 @@ func (m *Model) buildContent() {
 		innerW = 56
 	}
 
-	add("")
-	add("  " + styles.RenderLogo(i18n.T("log_title"), len(m.entries)))
-	add("")
-	add(styles.DoubleLine(innerW))
-	add("")
+	// Sticky header: blank + logo (split per visual line) + blank + separator.
+	header = append(header, "")
+	logo := "  " + styles.RenderLogo(i18n.T("log_title"), len(m.entries))
+	for _, line := range strings.Split(logo, "\n") {
+		header = append(header, line)
+	}
+	header = append(header, "")
+	header = append(header, styles.DoubleLine(innerW))
+	m.headerLines = header
 
+	// Body: log entries.
+	add := func(s string) { lines = append(lines, s) }
+	add("")
 	if len(m.entries) == 0 {
 		add("  " + styles.Amber.Render(i18n.T("log_empty")))
 	} else {
@@ -66,12 +77,9 @@ func (m *Model) buildContent() {
 			add(fmt.Sprintf("  %s  %s  %s", ts, action, e.Message))
 		}
 	}
-
 	add("")
 	add("  " + styles.Dim.Render(i18n.T("press_q")))
-	add("")
-
-	m.contentLines = lines
+	m.bodyLines = lines
 }
 
 func colorAction(action string) string {
@@ -106,6 +114,22 @@ func (m Model) Init() tea.Cmd {
 	return nil
 }
 
+func (m Model) bodyHeight() int {
+	h := m.height - len(m.headerLines) - 2
+	if h < 5 {
+		h = 5
+	}
+	return h
+}
+
+func (m Model) maxScroll() int {
+	max := len(m.bodyLines) - m.bodyHeight()
+	if max < 0 {
+		return 0
+	}
+	return max
+}
+
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
@@ -117,12 +141,30 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 				m.scroll--
 			}
 		case "down", "j":
-			maxScroll := len(m.contentLines) - m.height + 2
-			if maxScroll < 0 {
-				maxScroll = 0
-			}
-			if m.scroll < maxScroll {
+			if m.scroll < m.maxScroll() {
 				m.scroll++
+			}
+		case "home", "g":
+			m.scroll = 0
+		case "end", "G":
+			m.scroll = m.maxScroll()
+		case "pgup":
+			step := m.bodyHeight() - 2
+			if step < 1 {
+				step = 1
+			}
+			m.scroll -= step
+			if m.scroll < 0 {
+				m.scroll = 0
+			}
+		case "pgdown":
+			step := m.bodyHeight() - 2
+			if step < 1 {
+				step = 1
+			}
+			m.scroll += step
+			if m.scroll > m.maxScroll() {
+				m.scroll = m.maxScroll()
 			}
 		case "ctrl+c":
 			return m, tea.Quit
@@ -132,22 +174,25 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 }
 
 func (m Model) View() string {
-	visibleHeight := m.height
-	if visibleHeight <= 0 {
-		visibleHeight = 40
-	}
-
+	bodyH := m.bodyHeight()
 	start := m.scroll
-	end := start + visibleHeight
-	if end > len(m.contentLines) {
-		end = len(m.contentLines)
+	end := start + bodyH
+	if end > len(m.bodyLines) {
+		end = len(m.bodyLines)
 	}
-	if start >= end {
-		start = 0
-		if end == 0 {
-			end = len(m.contentLines)
-		}
+	if start > end {
+		start = end
 	}
 
-	return strings.Join(m.contentLines[start:end], "\n")
+	var b strings.Builder
+	b.WriteString(strings.Join(m.headerLines, "\n"))
+	b.WriteString("\n")
+	b.WriteString(strings.Join(m.bodyLines[start:end], "\n"))
+
+	if m.maxScroll() > 0 {
+		b.WriteString("\n  " + styles.Dim.Render(fmt.Sprintf(
+			"(%d-%d of %d  ·  ↑↓ scroll  PgUp/PgDn page  g/G top/bottom)",
+			start+1, end, len(m.bodyLines))))
+	}
+	return b.String()
 }

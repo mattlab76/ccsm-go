@@ -25,19 +25,40 @@ var (
 	StatusBarAction = lipgloss.NewStyle().Background(lipgloss.Color("236")).Foreground(lipgloss.Color("252"))
 )
 
-// Logo returns the ASCII art logo lines (without color).
+// 6-line block letters spelling "CCSM" — bigger and more recognisable
+// than the previous compact 3-line variant.
 const (
-	LogoLine1 = "╔═╗ ╔═╗ ╔═╗ ╔╦╗"
-	LogoLine2 = "║   ║   ╚═╗ ║║║"
-	LogoLine3 = "╚═╝ ╚═╝ ╚═╝ ╩ ╩"
+	LogoLine1 = ` ██████╗ ██████╗ ███████╗███╗   ███╗`
+	LogoLine2 = `██╔════╝██╔════╝██╔════╝████╗ ████║`
+	LogoLine3 = `██║     ██║     ███████╗██╔████╔██║`
+	LogoLine4 = `██║     ██║     ╚════██║██║╚██╔╝██║`
+	LogoLine5 = `╚██████╗╚██████╗███████║██║ ╚═╝ ██║`
+	LogoLine6 = ` ╚═════╝ ╚═════╝╚══════╝╚═╝     ╚═╝`
 )
 
-// RenderLogo returns the colored logo with title and session count.
+// RenderLogo returns the colored block logo with title + session count.
+//
+// Layout: title sits to the right of line 3 (vertically centered),
+// count one line below. Callers prepend a 2-space indent to the
+// returned string; this function continues that indent on lines 2–6
+// so the whole block lines up.
+//
+//	   ██████╗ ██████╗ ███████╗███╗   ███╗
+//	  ██╔════╝██╔════╝██╔════╝████╗ ████║
+//	  ██║     ██║     ███████╗██╔████╔██║   Title here
+//	  ██║     ██║     ╚════██║██║╚██╔╝██║   N session(s)
+//	  ╚██████╗╚██████╗███████║██║ ╚═╝ ██║
+//	   ╚═════╝ ╚═════╝╚══════╝╚═╝     ╚═╝
 func RenderLogo(title string, count int) string {
 	countStr := Dim.Render(formatCount(count))
-	return Violet.Render(LogoLine1) + "   " + Bold.Render(title) + "        " + countStr + "\n" +
-		Violet.Render(LogoLine2) + "\n" +
-		Violet.Render(LogoLine3)
+	const gap = "   "
+	const indent = "  " // matches the 2-space prefix every caller prepends
+	return VioletBold.Render(LogoLine1) + "\n" +
+		indent + VioletBold.Render(LogoLine2) + "\n" +
+		indent + VioletBold.Render(LogoLine3) + gap + Bold.Render(title) + "\n" +
+		indent + VioletBold.Render(LogoLine4) + gap + countStr + "\n" +
+		indent + VioletBold.Render(LogoLine5) + "\n" +
+		indent + VioletBold.Render(LogoLine6)
 }
 
 func formatCount(n int) string {

@@ -24,7 +24,14 @@ const (
 	stateLangInput
 	stateCleanupInput
 	stateLogDaysInput
+	stateCurrencyInput
+	stateRateInput
+	statePlanNameInput
+	statePlanPriceInput
 )
+
+// Number of fields the cursor can stop on (rows shown in the View).
+const fieldCount = 7
 
 // Model handles the settings menu.
 type Model struct {
@@ -53,6 +60,14 @@ func editStateForCursor(c int) state {
 		return stateCleanupInput
 	case 2:
 		return stateLogDaysInput
+	case 3:
+		return stateCurrencyInput
+	case 4:
+		return stateRateInput
+	case 5:
+		return statePlanNameInput
+	case 6:
+		return statePlanPriceInput
 	}
 	return stateMenu
 }
@@ -100,12 +115,32 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.state = stateLogDaysInput
 			m.input = ""
 			m.message = ""
+		case "4":
+			m.cursor = 3
+			m.state = stateCurrencyInput
+			m.input = ""
+			m.message = ""
+		case "5":
+			m.cursor = 4
+			m.state = stateRateInput
+			m.input = ""
+			m.message = ""
+		case "6":
+			m.cursor = 5
+			m.state = statePlanNameInput
+			m.input = ""
+			m.message = ""
+		case "7":
+			m.cursor = 6
+			m.state = statePlanPriceInput
+			m.input = ""
+			m.message = ""
 		case "up", "k":
 			if m.cursor > 0 {
 				m.cursor--
 			}
 		case "down", "j":
-			if m.cursor < 2 {
+			if m.cursor < fieldCount-1 {
 				m.cursor++
 			}
 		case "enter":
@@ -199,6 +234,113 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 				m.input += key
 			}
 		}
+
+	case stateCurrencyInput:
+		switch key {
+		case "enter":
+			v := strings.ToUpper(strings.TrimSpace(m.input))
+			if len(v) >= 3 && len(v) <= 4 {
+				m.settings.Currency = v
+				db.SaveSettings(m.db, m.settings)
+				db.LogAction(m.db, model.ActionSettings, "currency: "+v)
+				m.message = i18n.T("settings_saved")
+			} else {
+				m.message = i18n.T("settings_invalid")
+			}
+			m.state = stateMenu
+			m.input = ""
+		case "esc":
+			m.state = stateMenu
+			m.input = ""
+		case "backspace":
+			if len(m.input) > 0 {
+				m.input = m.input[:len(m.input)-1]
+			}
+		default:
+			if len(key) == 1 && ((key[0] >= 'a' && key[0] <= 'z') ||
+				(key[0] >= 'A' && key[0] <= 'Z')) {
+				m.input += key
+			}
+		}
+
+	case stateRateInput:
+		switch key {
+		case "enter":
+			v, err := strconv.ParseFloat(strings.TrimSpace(m.input), 64)
+			if err == nil && v > 0 && v < 1000 {
+				m.settings.ExchangeRate = v
+				db.SaveSettings(m.db, m.settings)
+				db.LogAction(m.db, model.ActionSettings, fmt.Sprintf("exchange_rate: %.4f", v))
+				m.message = i18n.T("settings_saved")
+			} else {
+				m.message = i18n.T("settings_invalid")
+			}
+			m.state = stateMenu
+			m.input = ""
+		case "esc":
+			m.state = stateMenu
+			m.input = ""
+		case "backspace":
+			if len(m.input) > 0 {
+				m.input = m.input[:len(m.input)-1]
+			}
+		default:
+			if len(key) == 1 && ((key[0] >= '0' && key[0] <= '9') ||
+				(key[0] == '.' && !strings.Contains(m.input, "."))) {
+				m.input += key
+			}
+		}
+
+	case statePlanNameInput:
+		switch key {
+		case "enter":
+			m.settings.PlanName = strings.TrimSpace(m.input)
+			db.SaveSettings(m.db, m.settings)
+			db.LogAction(m.db, model.ActionSettings, "plan_name: "+m.settings.PlanName)
+			m.message = i18n.T("settings_saved")
+			m.state = stateMenu
+			m.input = ""
+		case "esc":
+			m.state = stateMenu
+			m.input = ""
+		case "backspace":
+			if len(m.input) > 0 {
+				m.input = m.input[:len(m.input)-1]
+			}
+		default:
+			if len(key) == 1 {
+				m.input += key
+			}
+		}
+
+	case statePlanPriceInput:
+		switch key {
+		case "enter":
+			v, err := strconv.ParseFloat(strings.TrimSpace(m.input), 64)
+			if err == nil && v >= 0 && v < 100_000 {
+				m.settings.PlanMonthlyPrice = v
+				db.SaveSettings(m.db, m.settings)
+				db.LogAction(m.db, model.ActionSettings, fmt.Sprintf("plan_monthly_price: %.2f", v))
+				m.message = i18n.T("settings_saved")
+			} else {
+				m.message = i18n.T("settings_invalid")
+			}
+			m.state = stateMenu
+			m.input = ""
+		case "esc":
+			m.state = stateMenu
+			m.input = ""
+		case "backspace":
+			if len(m.input) > 0 {
+				m.input = m.input[:len(m.input)-1]
+			}
+		default:
+			if len(key) == 1 && ((key[0] >= '0' && key[0] <= '9') ||
+				(key[0] == '.' && !strings.Contains(m.input, "."))) {
+				m.input += key
+			}
+		}
+
 	}
 
 	return m, nil
@@ -238,6 +380,43 @@ func (m Model) View() string {
 		i18n.T("settings_cleanup_current"),
 		fmt.Sprintf("%d", m.settings.LogDays)))
 
+	currency := m.settings.Currency
+	if currency == "" {
+		currency = "USD"
+	}
+	b.WriteString(settingRow(m.cursor == 3 && m.state == stateMenu, "4",
+		i18n.T("settings_currency"),
+		i18n.T("settings_lang_current"),
+		currency))
+
+	rate := m.settings.ExchangeRate
+	rateVal := "1.0"
+	if rate > 0 {
+		rateVal = fmt.Sprintf("%.4f", rate)
+	}
+	b.WriteString(settingRow(m.cursor == 4 && m.state == stateMenu, "5",
+		i18n.T("settings_rate"),
+		i18n.T("settings_lang_current"),
+		rateVal))
+
+	planName := m.settings.PlanName
+	if planName == "" {
+		planName = "(not set)"
+	}
+	b.WriteString(settingRow(m.cursor == 5 && m.state == stateMenu, "6",
+		i18n.T("settings_plan_name"),
+		i18n.T("settings_lang_current"),
+		planName))
+
+	planPrice := "(not set)"
+	if m.settings.PlanMonthlyPrice > 0 {
+		planPrice = fmt.Sprintf("%.2f %s", m.settings.PlanMonthlyPrice, currency)
+	}
+	b.WriteString(settingRow(m.cursor == 6 && m.state == stateMenu, "7",
+		i18n.T("settings_plan_price"),
+		i18n.T("settings_lang_current"),
+		planPrice))
+
 	b.WriteString("\n")
 
 	if m.message != "" {
@@ -246,7 +425,7 @@ func (m Model) View() string {
 
 	switch m.state {
 	case stateMenu:
-		b.WriteString("  " + styles.Dim.Render("↑/↓ navigate  Enter edit  1-3 jump  q back") + "\n")
+		b.WriteString("  " + styles.Dim.Render("↑/↓ navigate  Enter edit  1-7 jump  q back") + "\n")
 	case stateLangInput:
 		b.WriteString("  " + i18n.T("settings_lang_prompt") + "\n")
 		b.WriteString("  > " + m.input + "█\n")
@@ -255,6 +434,18 @@ func (m Model) View() string {
 		b.WriteString("  > " + m.input + "█\n")
 	case stateLogDaysInput:
 		b.WriteString("  " + i18n.T("settings_log_days_prompt") + "\n")
+		b.WriteString("  > " + m.input + "█\n")
+	case stateCurrencyInput:
+		b.WriteString("  " + i18n.T("settings_currency_prompt") + "\n")
+		b.WriteString("  > " + m.input + "█\n")
+	case stateRateInput:
+		b.WriteString("  " + i18n.T("settings_rate_prompt") + "\n")
+		b.WriteString("  > " + m.input + "█\n")
+	case statePlanNameInput:
+		b.WriteString("  " + i18n.T("settings_plan_name_prompt") + "\n")
+		b.WriteString("  > " + m.input + "█\n")
+	case statePlanPriceInput:
+		b.WriteString("  " + i18n.T("settings_plan_price_prompt") + "\n")
 		b.WriteString("  > " + m.input + "█\n")
 	}
 

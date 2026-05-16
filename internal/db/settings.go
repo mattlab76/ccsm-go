@@ -6,6 +6,17 @@ import (
 	"github.com/mattlab76/ccsm-go/internal/model"
 )
 
+// settings keys used in the key/value settings table.
+const (
+	keyCleanupDays      = "cleanup_days"
+	keyLogDays          = "log_days"
+	keyLang             = "lang"
+	keyCurrency         = "currency"
+	keyExchangeRate     = "exchange_rate"
+	keyPlanName         = "plan_name"
+	keyPlanMonthlyPrice = "plan_monthly_price"
+)
+
 // GetSettings reads all settings from the database, returning defaults for missing keys.
 func GetSettings(db *DB) (*model.Settings, error) {
 	s := model.DefaultSettings()
@@ -22,16 +33,28 @@ func GetSettings(db *DB) (*model.Settings, error) {
 			continue
 		}
 		switch key {
-		case "cleanup_days":
+		case keyCleanupDays:
 			if v, err := strconv.Atoi(value); err == nil {
 				s.CleanupDays = v
 			}
-		case "log_days":
+		case keyLogDays:
 			if v, err := strconv.Atoi(value); err == nil {
 				s.LogDays = v
 			}
-		case "lang":
+		case keyLang:
 			s.Lang = value
+		case keyCurrency:
+			s.Currency = value
+		case keyExchangeRate:
+			if v, err := strconv.ParseFloat(value, 64); err == nil {
+				s.ExchangeRate = v
+			}
+		case keyPlanName:
+			s.PlanName = value
+		case keyPlanMonthlyPrice:
+			if v, err := strconv.ParseFloat(value, 64); err == nil {
+				s.PlanMonthlyPrice = v
+			}
 		}
 	}
 	return &s, rows.Err()
@@ -40,9 +63,13 @@ func GetSettings(db *DB) (*model.Settings, error) {
 // SaveSettings persists all settings to the database.
 func SaveSettings(db *DB, s *model.Settings) error {
 	pairs := map[string]string{
-		"cleanup_days": strconv.Itoa(s.CleanupDays),
-		"log_days":     strconv.Itoa(s.LogDays),
-		"lang":         s.Lang,
+		keyCleanupDays:      strconv.Itoa(s.CleanupDays),
+		keyLogDays:          strconv.Itoa(s.LogDays),
+		keyLang:             s.Lang,
+		keyCurrency:         s.Currency,
+		keyExchangeRate:     strconv.FormatFloat(s.ExchangeRate, 'f', 4, 64),
+		keyPlanName:         s.PlanName,
+		keyPlanMonthlyPrice: strconv.FormatFloat(s.PlanMonthlyPrice, 'f', 2, 64),
 	}
 	for key, value := range pairs {
 		if _, err := db.Exec(

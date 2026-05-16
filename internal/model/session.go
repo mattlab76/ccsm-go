@@ -37,16 +37,22 @@ const (
 
 // Settings holds the application configuration.
 type Settings struct {
-	CleanupDays int
-	LogDays     int
-	Lang        string
+	CleanupDays      int
+	LogDays          int
+	Lang             string
+	Currency         string  // ISO 4217 code, e.g. "EUR". Empty/USD = no conversion.
+	ExchangeRate     float64 // USD → Currency rate, e.g. 0.92 for USD→EUR
+	PlanName         string  // free text, e.g. "Max 5x" / "Pro" / "API"
+	PlanMonthlyPrice float64 // monthly price in the target Currency
 }
 
 // DefaultSettings returns settings with default values.
 func DefaultSettings() Settings {
 	return Settings{
-		CleanupDays: 30,
-		LogDays:     90,
-		Lang:        "en",
+		CleanupDays:  30,
+		LogDays:      90,
+		Lang:         "en",
+		Currency:     "USD",
+		ExchangeRate: 1.0,
 	}
 }

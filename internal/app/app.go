@@ -165,35 +165,48 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// handleChildSwitch swaps the active view in and runs the new child's
+// Init so any startup commands (e.g. async data loads in mainmenu)
+// actually fire. Without forwarding the Init cmd, async work registered
+// in a child's Init never executes when transitioning between views.
 func (m Model) handleChildSwitch(view ViewType) (tea.Model, tea.Cmd) {
 	m.currentView = view
+	var cmd tea.Cmd
 	switch view {
 	case ViewMainMenu:
 		m.mainMenu = mainmenu.New(m.db)
 		m.mainMenu = m.mainMenu.SetSize(m.width, m.height)
+		cmd = m.mainMenu.Init()
 	case ViewNewSession:
 		m.newSession = newsession.New(m.db)
 		m.newSession = m.newSession.SetSize(m.width, m.height)
+		cmd = m.newSession.Init()
 	case ViewBrowser:
 		m.browser = browser.New(m.db)
 		m.browser = m.browser.SetSize(m.width, m.height)
+		cmd = m.browser.Init()
 	case ViewDelete:
 		m.deleteView = delete.New(m.db)
 		m.deleteView = m.deleteView.SetSize(m.width, m.height)
+		cmd = m.deleteView.Init()
 	case ViewStats:
 		m.statsView = stats.New(m.db)
 		m.statsView = m.statsView.SetSize(m.width, m.height)
+		cmd = m.statsView.Init()
 	case ViewLog:
 		m.logView = uilog.New(m.db)
 		m.logView = m.logView.SetSize(m.width, m.height)
+		cmd = m.logView.Init()
 	case ViewSettings:
 		m.settingsView = settings.New(m.db)
 		m.settingsView = m.settingsView.SetSize(m.width, m.height)
+		cmd = m.settingsView.Init()
 	case ViewStartupCheck:
 		m.startupView = startup.New(m.db)
 		m.startupView = m.startupView.SetSize(m.width, m.height)
+		cmd = m.startupView.Init()
 	}
-	return m, nil
+	return m, cmd
 }
 
 func (m Model) startResume(sid, cwd string) (tea.Model, tea.Cmd) {

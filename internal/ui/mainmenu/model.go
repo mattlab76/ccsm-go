@@ -10,7 +10,14 @@ import (
 	"github.com/mattlab76/ccsm-go/internal/model"
 	"github.com/mattlab76/ccsm-go/internal/ui/components"
 	"github.com/mattlab76/ccsm-go/internal/ui/styles"
+	"github.com/mattlab76/ccsm-go/internal/usage"
 )
+
+// usageReadyMsg carries an async-computed usage snapshot to the model.
+type usageReadyMsg struct {
+	snap usage.Snapshot
+	err  error
+}
 
 // menuAction binds a key shortcut + label to a target view.
 type menuAction struct {
@@ -37,14 +44,16 @@ func menuActions() []menuAction {
 // The cursor spans sessions (0..len(sessions)-1) and then menu items
 // (len(sessions)..len(sessions)+len(menuActions)-1).
 type Model struct {
-	db       *db.DB
-	sessions []model.Session
-	rows     []components.TableRow
-	actions  []menuAction
-	width    int
-	height   int
-	cursor   int
-	err      error
+	db        *db.DB
+	sessions  []model.Session
+	rows      []components.TableRow
+	actions   []menuAction
+	width     int
+	height    int
+	cursor    int
+	err       error
+	usageSnap usage.Snapshot // populated async; zero-value until ready
+	usageReady bool
 }
 
 // New creates a new main menu model.
@@ -87,10 +96,20 @@ func (m Model) SetSize(width, height int) Model {
 }
 
 func (m Model) Init() tea.Cmd {
-	return nil
+	// Kick off async usage computation so the banner can populate
+	// without blocking the initial menu render.
+	return func() tea.Msg {
+		snap, err := usage.Compute()
+		return usageReadyMsg{snap: snap, err: err}
+	}
 }
 
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
+	if ur, ok := msg.(usageReadyMsg); ok {
+		m.usageSnap = ur.snap
+		m.usageReady = true
+		return m, nil
+	}
 	keyMsg, ok := msg.(tea.KeyMsg)
 	if !ok {
 		return m, nil
@@ -177,6 +196,9 @@ func (m Model) View() string {
 	))
 	b.WriteString("\n\n")
 
+	// Usage banner (shown once the async computation has returned).
+	b.WriteString("  " + m.renderUsageBanner() + "\n")
+
 	// Separator
 	b.WriteString(styles.DoubleLine(innerW))
 	b.WriteString("\n")
@@ -222,6 +244,43 @@ func (m Model) View() string {
 	b.WriteString("  " + styles.Dim.Render("↑/↓ navigate  Enter activate  shortcut for direct action") + "\n")
 
 	return b.String()
+}
+
+// renderUsageBanner produces the one-line summary above the menu.
+// Shows total tokens used today / over the rolling 7 days, and the
+// model that dominated this week by token volume. Costs intentionally
+// live in the Statistics view, not here.
+func (m Model) renderUsageBanner() string {
+	if !m.usageReady {
+		return styles.Dim.Render("Usage: computing…")
+	}
+	todayTok := m.usageSnap.Today.InputTokens + m.usageSnap.Today.OutputTokens
+	weekTok := m.usageSnap.ThisWeek.InputTokens + m.usageSnap.ThisWeek.OutputTokens
+
+	topModel := "–"
+	if len(m.usageSnap.ThisWeek.ByModel) > 0 {
+		// Pick the heaviest model by total tokens — the snapshot sorts
+		// by cost, which can rank differently when mixing Opus/Sonnet/Haiku.
+		var top usage.ModelStats
+		var topTok int64
+		for _, ms := range m.usageSnap.ThisWeek.ByModel {
+			t := ms.InputTokens + ms.OutputTokens
+			if t > topTok {
+				topTok = t
+				top = ms
+			}
+		}
+		share := ""
+		if weekTok > 0 {
+			share = fmt.Sprintf(" (%.0f%%)", float64(topTok)/float64(weekTok)*100)
+		}
+		topModel = usage.ModelShort(top.Model) + share
+	}
+
+	return styles.Dim.Render(fmt.Sprintf(i18n.T("usage_banner"),
+		styles.Green.Render(usage.FormatTokens(todayTok)),
+		styles.Green.Render(usage.FormatTokens(weekTok)),
+		styles.Violet.Render(topModel)))
 }
 
 func menuItem(key, label string, selected bool) string {
