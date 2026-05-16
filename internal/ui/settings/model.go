@@ -33,6 +33,7 @@ type Model struct {
 	width    int
 	height   int
 	state    state
+	cursor   int // 0..2 — selected field in stateMenu
 	input    string
 	message  string
 }
@@ -41,6 +42,19 @@ type Model struct {
 func New(database *db.DB) Model {
 	s, _ := db.GetSettings(database)
 	return Model{db: database, settings: s, width: 100, state: stateMenu}
+}
+
+// editStateForCursor maps the cursor position to its input state.
+func editStateForCursor(c int) state {
+	switch c {
+	case 0:
+		return stateLangInput
+	case 1:
+		return stateCleanupInput
+	case 2:
+		return stateLogDaysInput
+	}
+	return stateMenu
 }
 
 func (m Model) SetSize(width, height int) Model {
@@ -72,15 +86,30 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	case stateMenu:
 		switch key {
 		case "1":
+			m.cursor = 0
 			m.state = stateLangInput
 			m.input = ""
 			m.message = ""
 		case "2":
+			m.cursor = 1
 			m.state = stateCleanupInput
 			m.input = ""
 			m.message = ""
 		case "3":
+			m.cursor = 2
 			m.state = stateLogDaysInput
+			m.input = ""
+			m.message = ""
+		case "up", "k":
+			if m.cursor > 0 {
+				m.cursor--
+			}
+		case "down", "j":
+			if m.cursor < 2 {
+				m.cursor++
+			}
+		case "enter":
+			m.state = editStateForCursor(m.cursor)
 			m.input = ""
 			m.message = ""
 		case "q", "esc":
@@ -193,24 +222,21 @@ func (m Model) View() string {
 	b.WriteString(styles.DoubleLine(innerW))
 	b.WriteString("\n\n")
 
-	// Current values.
-	b.WriteString(fmt.Sprintf("  %s [1] %s  %s %s\n",
-		styles.Green.Render("[1]"),
+	// Current values, with cursor marker on the active field.
+	b.WriteString(settingRow(m.cursor == 0 && m.state == stateMenu, "1",
 		i18n.T("settings_lang"),
-		styles.Dim.Render(i18n.T("settings_lang_current")+":"),
-		styles.Violet.Render(m.settings.Lang)))
+		i18n.T("settings_lang_current"),
+		m.settings.Lang))
 
-	b.WriteString(fmt.Sprintf("  %s [2] %s  %s %s\n",
-		styles.Green.Render("[2]"),
+	b.WriteString(settingRow(m.cursor == 1 && m.state == stateMenu, "2",
 		i18n.T("settings_cleanup"),
-		styles.Dim.Render(i18n.T("settings_cleanup_current")+":"),
-		styles.Violet.Render(fmt.Sprintf("%d", m.settings.CleanupDays))))
+		i18n.T("settings_cleanup_current"),
+		fmt.Sprintf("%d", m.settings.CleanupDays)))
 
-	b.WriteString(fmt.Sprintf("  %s [3] %s  %s %s\n",
-		styles.Green.Render("[3]"),
+	b.WriteString(settingRow(m.cursor == 2 && m.state == stateMenu, "3",
 		i18n.T("settings_log_days"),
-		styles.Dim.Render(i18n.T("settings_cleanup_current")+":"),
-		styles.Violet.Render(fmt.Sprintf("%d", m.settings.LogDays))))
+		i18n.T("settings_cleanup_current"),
+		fmt.Sprintf("%d", m.settings.LogDays)))
 
 	b.WriteString("\n")
 
@@ -220,7 +246,7 @@ func (m Model) View() string {
 
 	switch m.state {
 	case stateMenu:
-		b.WriteString("  " + styles.Dim.Render(i18n.T("press_q")) + "\n")
+		b.WriteString("  " + styles.Dim.Render("↑/↓ navigate  Enter edit  1-3 jump  q back") + "\n")
 	case stateLangInput:
 		b.WriteString("  " + i18n.T("settings_lang_prompt") + "\n")
 		b.WriteString("  > " + m.input + "█\n")
@@ -233,4 +259,17 @@ func (m Model) View() string {
 	}
 
 	return b.String()
+}
+
+func settingRow(selected bool, key, label, currentLabel, value string) string {
+	prefix := "  "
+	if selected {
+		prefix = styles.Violet.Render("▶ ")
+	}
+	return fmt.Sprintf("%s%s %s  %s %s\n",
+		prefix,
+		styles.Green.Render("["+key+"]"),
+		label,
+		styles.Dim.Render(currentLabel+":"),
+		styles.Violet.Render(value))
 }

@@ -12,25 +12,47 @@ import (
 	"github.com/mattlab76/ccsm-go/internal/ui/styles"
 )
 
+// menuAction binds a key shortcut + label to a target view.
+type menuAction struct {
+	key   string
+	label string
+	view  int // -1 = quit (no view switch)
+}
+
+// menuActions defines the order of menu items shown below the sessions table.
+// The cursor navigates through sessions first, then these items.
+func menuActions() []menuAction {
+	return []menuAction{
+		{"n", i18n.T("menu_new"), viewNewSession},
+		{"s", i18n.T("menu_resume"), viewBrowser},
+		{"d", i18n.T("menu_delete"), viewDelete},
+		{"i", i18n.T("menu_stats"), viewStats},
+		{"l", i18n.T("menu_log"), viewLog},
+		{"c", i18n.T("menu_settings"), viewSettings},
+		{"q", i18n.T("menu_quit"), -1},
+	}
+}
+
 // Model is the main menu bubbletea model.
+// The cursor spans sessions (0..len(sessions)-1) and then menu items
+// (len(sessions)..len(sessions)+len(menuActions)-1).
 type Model struct {
 	db       *db.DB
 	sessions []model.Session
 	rows     []components.TableRow
+	actions  []menuAction
 	width    int
 	height   int
-	cursor   int // -1 = no session selected, 0-4 = session row
+	cursor   int
 	err      error
 }
 
 // New creates a new main menu model.
 func New(database *db.DB) Model {
-	m := Model{db: database, width: 100, cursor: -1}
+	m := Model{db: database, width: 100, actions: menuActions()}
 	m.loadSessions()
-	if len(m.sessions) > 0 {
-		m.cursor = 0
-		m.updateSelection()
-	}
+	m.cursor = 0 // first session, or first menu item if no sessions
+	m.updateSelection()
 	return m
 }
 
@@ -69,52 +91,66 @@ func (m Model) Init() tea.Cmd {
 }
 
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "q":
-			return m, tea.Quit
-		case "n":
-			return m, switchView(viewNewSession)
-		case "s":
-			return m, switchView(viewBrowser)
-		case "d":
-			return m, switchView(viewDelete)
-		case "i":
-			return m, switchView(viewStats)
-		case "l":
-			return m, switchView(viewLog)
-		case "c":
-			return m, switchView(viewSettings)
-		case "up", "k":
-			if m.cursor > 0 {
-				m.cursor--
-				m.updateSelection()
+	keyMsg, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return m, nil
+	}
+	key := keyMsg.String()
+
+	// Letter shortcuts: route directly regardless of cursor position.
+	for _, a := range m.actions {
+		if key == a.key {
+			return m, m.activateAction(a)
+		}
+	}
+
+	// Navigation across sessions + menu items.
+	total := len(m.sessions) + len(m.actions)
+	switch key {
+	case "up", "k":
+		if m.cursor > 0 {
+			m.cursor--
+			m.updateSelection()
+		}
+	case "down", "j":
+		if m.cursor < total-1 {
+			m.cursor++
+			m.updateSelection()
+		}
+	case "home", "g":
+		m.cursor = 0
+		m.updateSelection()
+	case "end", "G":
+		m.cursor = total - 1
+		m.updateSelection()
+	case "enter":
+		if m.cursor < len(m.sessions) {
+			s := m.sessions[m.cursor]
+			return m, func() tea.Msg {
+				return ResumeSessionMsg{SID: s.SID, CWD: s.CWD}
 			}
-		case "down", "j":
-			if m.cursor < len(m.sessions)-1 {
-				m.cursor++
-				m.updateSelection()
+		}
+		actionIdx := m.cursor - len(m.sessions)
+		if actionIdx >= 0 && actionIdx < len(m.actions) {
+			return m, m.activateAction(m.actions[actionIdx])
+		}
+	case "1", "2", "3", "4", "5":
+		idx := int(key[0] - '1')
+		if idx < len(m.sessions) {
+			s := m.sessions[idx]
+			return m, func() tea.Msg {
+				return ResumeSessionMsg{SID: s.SID, CWD: s.CWD}
 			}
-		case "enter":
-			if m.cursor >= 0 && m.cursor < len(m.sessions) {
-				s := m.sessions[m.cursor]
-				return m, func() tea.Msg {
-					return ResumeSessionMsg{SID: s.SID, CWD: s.CWD}
-				}
-			}
-		case "1", "2", "3", "4", "5":
-			idx := int(msg.String()[0] - '1')
-			if idx < len(m.sessions) {
-				s := m.sessions[idx]
-				return m, func() tea.Msg {
-					return ResumeSessionMsg{SID: s.SID, CWD: s.CWD}
-				}
-			}
-			return m, nil
 		}
 	}
 	return m, nil
+}
+
+func (m Model) activateAction(a menuAction) tea.Cmd {
+	if a.view < 0 {
+		return tea.Quit
+	}
+	return switchView(a.view)
 }
 
 func (m Model) View() string {
@@ -172,13 +208,10 @@ func (m Model) View() string {
 	// Menu
 	b.WriteString("  " + styles.TealBold.Render(i18n.T("menu_action")))
 	b.WriteString("\n\n")
-	b.WriteString(menuItem("n", i18n.T("menu_new")))
-	b.WriteString(menuItem("s", i18n.T("menu_resume")))
-	b.WriteString(menuItem("d", i18n.T("menu_delete")))
-	b.WriteString(menuItem("i", i18n.T("menu_stats")))
-	b.WriteString(menuItem("l", i18n.T("menu_log")))
-	b.WriteString(menuItem("c", i18n.T("menu_settings")))
-	b.WriteString(menuItem("q", i18n.T("menu_quit")))
+	for i, a := range m.actions {
+		selected := m.cursor == len(m.sessions)+i
+		b.WriteString(menuItem(a.key, a.label, selected))
+	}
 
 	if m.err != nil {
 		b.WriteString("\n  " + styles.Red.Render(fmt.Sprintf("Error: %v", m.err)))
@@ -186,15 +219,17 @@ func (m Model) View() string {
 
 	// Hints
 	b.WriteString("\n")
-	if len(m.sessions) > 0 {
-		b.WriteString("  " + styles.Dim.Render("↑/↓ select session  Enter resume  or press key for action") + "\n")
-	}
+	b.WriteString("  " + styles.Dim.Render("↑/↓ navigate  Enter activate  shortcut for direct action") + "\n")
 
 	return b.String()
 }
 
-func menuItem(key, label string) string {
-	return fmt.Sprintf("  %s %s\n", styles.Green.Render("["+key+"]"), label)
+func menuItem(key, label string, selected bool) string {
+	prefix := "  "
+	if selected {
+		prefix = styles.Violet.Render("▶ ")
+	}
+	return fmt.Sprintf("%s%s %s\n", prefix, styles.Green.Render("["+key+"]"), label)
 }
 
 // View type constants matching app.ViewType (avoid import cycle).

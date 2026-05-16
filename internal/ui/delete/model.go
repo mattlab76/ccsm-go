@@ -141,7 +141,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 
 	case stateConfirm:
 		switch strings.ToLower(key) {
-		case "y", "j":
+		case "y", "j", "enter":
 			return m.doDelete()
 		case "n", "q", "esc":
 			m.state = stateSelect
@@ -206,6 +206,35 @@ func (m Model) View() string {
 		return b.String()
 	}
 
+	// Render interactive controls ABOVE the table so they stay visible
+	// even when the table is taller than the terminal.
+	switch m.state {
+	case stateSelect:
+		if m.message != "" {
+			b.WriteString("  " + styles.Amber.Render(m.message) + "\n")
+		}
+		markedCount := len(m.marked)
+		if markedCount > 0 {
+			b.WriteString(fmt.Sprintf("  "+styles.Red.Render("%d marked for deletion")+"\n", markedCount))
+		}
+		b.WriteString("  " + styles.Dim.Render("↑/↓ navigate  Space mark  Enter delete marked  q back") + "\n\n")
+
+	case stateConfirm:
+		b.WriteString("  " + styles.Red.Render(fmt.Sprintf("Delete %d session(s)?", len(m.marked))) + "\n")
+		for idx := range m.marked {
+			if idx < len(m.sessions) {
+				b.WriteString("    " + styles.Red.Render("✗ "+m.sessions[idx].Subject) + "\n")
+			}
+		}
+		b.WriteString("\n  " + i18n.T("delete_confirm") + " [" + i18n.ConfirmPrompt() + "] \n\n")
+
+	case stateDone:
+		if m.message != "" {
+			b.WriteString("  " + styles.Green.Render("✓ "+m.message) + "\n")
+		}
+		b.WriteString("  " + styles.Dim.Render(i18n.T("press_q")) + "\n\n")
+	}
+
 	// Render table with marked rows indicated.
 	displayRows := make([]components.TableRow, len(m.rows))
 	copy(displayRows, m.rows)
@@ -223,34 +252,6 @@ func (m Model) View() string {
 	legend := components.RenderLegend(m.rows)
 	if legend != "" {
 		b.WriteString(legend + "\n")
-	}
-	b.WriteString("\n")
-
-	switch m.state {
-	case stateSelect:
-		if m.message != "" {
-			b.WriteString("  " + styles.Amber.Render(m.message) + "\n")
-		}
-		markedCount := len(m.marked)
-		if markedCount > 0 {
-			b.WriteString(fmt.Sprintf("  "+styles.Red.Render("%d marked for deletion")+"\n", markedCount))
-		}
-		b.WriteString("  " + styles.Dim.Render("↑/↓ navigate  Space mark  Enter delete marked  q back") + "\n")
-
-	case stateConfirm:
-		b.WriteString("  " + styles.Red.Render(fmt.Sprintf("Delete %d session(s)?", len(m.marked))) + "\n")
-		for idx := range m.marked {
-			if idx < len(m.sessions) {
-				b.WriteString("    " + styles.Red.Render("✗ "+m.sessions[idx].Subject) + "\n")
-			}
-		}
-		b.WriteString("\n  " + i18n.T("delete_confirm") + " [" + i18n.ConfirmPrompt() + "] ")
-
-	case stateDone:
-		if m.message != "" {
-			b.WriteString("  " + styles.Green.Render("✓ "+m.message) + "\n")
-		}
-		b.WriteString("\n  " + styles.Dim.Render(i18n.T("press_q")) + "\n")
 	}
 
 	return b.String()
