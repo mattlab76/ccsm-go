@@ -16,6 +16,7 @@ Installation:
 git clone ssh://git@git.mattlab.at/mattlab-apps/ccsm-go.git
 cd ccsm-go
 make install
+ccsm install-hook   # registriert den SessionEnd-Hook in Claude Code
 ```
 
 Volle Anleitung, Tastatur-Übersicht, Architektur und Konfiguration:

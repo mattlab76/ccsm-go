@@ -69,6 +69,14 @@ func RecoverFromTranscript(targetDir string) *RecoveredSession {
 	return rec
 }
 
+// ParseTranscript reads a Claude JSONL transcript and returns the first
+// user-message text (auto subject) plus the summed input/output token usage.
+// Exposed for the SessionEnd hook entry point (`ccsm hook`), which needs the
+// same figures the bash hook produced — without jq/python3.
+func ParseTranscript(path string) (subject string, inTokens, outTokens int64) {
+	return parseTranscript(path)
+}
+
 // parseTranscript walks every line of a JSONL transcript pulling out
 // the first user-message text (as the auto-suggested subject) and
 // summing token usage from assistant messages. Matches what the bash

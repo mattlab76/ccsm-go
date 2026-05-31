@@ -5,11 +5,13 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/mattlab76/ccsm-go/internal/app"
 	"github.com/mattlab76/ccsm-go/internal/claude"
 	"github.com/mattlab76/ccsm-go/internal/db"
+	"github.com/mattlab76/ccsm-go/internal/hook"
 	"github.com/mattlab76/ccsm-go/internal/i18n"
 	"github.com/mattlab76/ccsm-go/internal/model"
 	"github.com/mattlab76/ccsm-go/internal/ui/components"
@@ -47,6 +49,9 @@ func main() {
 	rootCmd.AddCommand(statsCmd())
 	rootCmd.AddCommand(cleanupCmd())
 	rootCmd.AddCommand(migrateCmd())
+	rootCmd.AddCommand(hookCmd())
+	rootCmd.AddCommand(installHookCmd())
+	rootCmd.AddCommand(doctorCmd())
 
 	// Also support --version flag.
 	rootCmd.Version = model.Version
@@ -308,6 +313,116 @@ func migrateCmd() *cobra.Command {
 				fmt.Printf("  Dismissed: %d sessions\n", result.DismissedSIDs)
 			}
 			fmt.Println("\nMigration complete.")
+		},
+	}
+}
+
+// hookCmd is the SessionEnd hook entry point. Claude Code invokes
+// `ccsm hook` with the hook payload on stdin; we parse it and spool the
+// session metadata for the TUI. Hidden from help — users never call it
+// directly, they register it via `ccsm install-hook`.
+func hookCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:    "hook",
+		Short:  "SessionEnd hook entry point (reads JSON from stdin)",
+		Hidden: true,
+		Run: func(cmd *cobra.Command, args []string) {
+			// Best-effort: never surface an error that could disrupt
+			// Claude Code's shutdown.
+			_ = hook.HandleSessionEnd(os.Stdin)
+		},
+	}
+}
+
+// installHookCmd registers this ccsm binary as Claude Code's SessionEnd
+// hook in ~/.claude/settings.json, idempotently and without clobbering
+// other settings.
+func installHookCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "install-hook",
+		Short: "Register ccsm as Claude Code's SessionEnd hook",
+		Run: func(cmd *cobra.Command, args []string) {
+			exe, err := os.Executable()
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "cannot determine ccsm path: %v\n", err)
+				os.Exit(1)
+			}
+			action, path, err := hook.InstallSessionEndHook(exe)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				os.Exit(1)
+			}
+			switch action {
+			case "added":
+				fmt.Printf("✓ SessionEnd hook added to %s\n", path)
+			case "updated":
+				fmt.Printf("✓ SessionEnd hook updated in %s\n", path)
+			case "unchanged":
+				fmt.Printf("✓ SessionEnd hook already up to date (%s)\n", path)
+			}
+			fmt.Println("  Restart Claude Code once for the change to take effect.")
+		},
+	}
+}
+
+// doctorCmd runs environment checks and prints a ✓/✗ report.
+func doctorCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "doctor",
+		Short: "Check ccsm's environment (claude, hook, database)",
+		Run: func(cmd *cobra.Command, args []string) {
+			allOK := true
+			check := func(label string, pass bool, detail string) {
+				mark := "✓"
+				if !pass {
+					mark = "✗"
+					allOK = false
+				}
+				if detail != "" {
+					fmt.Printf("  %s %s — %s\n", mark, label, detail)
+				} else {
+					fmt.Printf("  %s %s\n", mark, label)
+				}
+			}
+
+			claudeOK := claude.IsInstalled()
+			claudeDetail := ""
+			if !claudeOK {
+				claudeDetail = "install Claude Code or add it to PATH"
+			}
+			check("claude on PATH", claudeOK, claudeDetail)
+
+			exe, _ := os.Executable()
+			check("ccsm binary", exe != "", exe)
+
+			installed, command, herr := hook.HookInstalled()
+			switch {
+			case herr != nil:
+				check("SessionEnd hook", false, herr.Error())
+			case installed:
+				check("SessionEnd hook", true, command)
+				if exe != "" && !strings.Contains(command, exe) {
+					fmt.Println("    • hook points at a different command; run 'ccsm install-hook' to use this binary")
+				}
+			default:
+				check("SessionEnd hook", false, "not registered — run 'ccsm install-hook'")
+			}
+
+			if database, derr := db.Open(); derr != nil {
+				check("database", false, derr.Error())
+			} else {
+				n, _ := db.CountSessions(database)
+				database.Close()
+				check("database", true, fmt.Sprintf("%d session(s)", n))
+			}
+
+			fmt.Println()
+			if allOK {
+				fmt.Println("All good.")
+			} else {
+				fmt.Println("Some checks failed — see above.")
+				os.Exit(1)
+			}
 		},
 	}
 }

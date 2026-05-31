@@ -25,33 +25,24 @@ ab. Wenn der Pfad in deiner `$PATH` steht (sollte er), funktioniert
 `ccsm` ab sofort von überall.
 
 Damit ccsm beim Session-Ende automatisch Subject, CWD und
-Token-Counts erfährt, brauchst du einmalig einen SessionEnd-Hook in
-deiner Claude-Konfiguration unter `~/.claude/settings.json`:
+Token-Counts erfährt, registrierst du ccsm einmalig als
+SessionEnd-Hook in Claude Code:
 
 ```
-{
-  "hooks": {
-    "SessionEnd": [
-      {
-        "matcher": "",
-        "hooks": [
-          { "type": "command",
-            "command": "bash /home/USER/.claude/hooks/ccsm_session_end.sh",
-            "timeout": 5 }
-        ]
-      }
-    ]
-  }
-}
+ccsm install-hook
 ```
 
-Das Hook-Skript liegt nach dem Installer unter
-`~/.claude/hooks/ccsm_session_end.sh`. Pfad an deinen Benutzer
-anpassen, dann Claude einmal neu starten.
+Das trägt `ccsm hook` idempotent in `~/.claude/settings.json` ein,
+ohne andere Einstellungen anzufassen, und ersetzt dabei eine
+eventuell vorhandene ältere Hook-Variante. Danach Claude Code einmal
+neu starten. Mit `ccsm doctor` prüfst du anschließend, ob Hook,
+`claude` im PATH und die Datenbank in Ordnung sind.
 
-Auch ohne Hook funktioniert ccsm — die fehlenden Daten zieht es
-dann direkt aus den JSONL-Transcripts unter `~/.claude/projects/`.
-Die Hook-Variante ist nur etwas schneller.
+Der Hook braucht keine externen Programme: `ccsm hook` liest Claudes
+Payload selbst und parst das Transcript in Go (kein jq, kein
+python3). Und auch ganz ohne Hook funktioniert ccsm — fehlende Daten
+zieht es direkt aus den JSONL-Transcripts unter `~/.claude/projects/`,
+der Hook ist nur etwas schneller.
 
 
 ## Erste Schritte
@@ -62,7 +53,7 @@ ein paar Claude-Sessions sieht der Hauptbildschirm so aus:
 ```
    ██████╗ ██████╗ ███████╗███╗   ███╗
   ██╔════╝██╔════╝██╔════╝████╗ ████║
-  ██║     ██║     ███████╗██╔████╔██║   Claude Code Session Manager v2.2.4
+  ██║     ██║     ███████╗██╔████╔██║   Claude Code Session Manager v2.3.0
   ██║     ██║     ╚════██║██║╚██╔╝██║   11 sessions
   ╚██████╗╚██████╗███████║██║ ╚═╝ ██║
    ╚═════╝ ╚═════╝╚══════╝╚═╝     ╚═╝
@@ -197,6 +188,8 @@ API-Kosten in USD an, ohne Vergleich.
 | `ccsm stats` | Statistik als Textausgabe |
 | `ccsm cleanup` | Sessions älter als Cleanup-Schwelle auflisten |
 | `ccsm migrate` | Daten aus der Bash-Version v1.x importieren |
+| `ccsm install-hook` | ccsm als SessionEnd-Hook in Claude Code eintragen |
+| `ccsm doctor` | Umgebung prüfen (claude, Hook, Datenbank) |
 | `ccsm version` | Version anzeigen |
 | `ccsm completion zsh` | Zsh-Autocompletion ausgeben |
 
