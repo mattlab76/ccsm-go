@@ -288,7 +288,7 @@ func TestSessionUpsert(t *testing.T) {
 	updated := &model.Session{
 		SID: "s2", CWD: "/home/user/project-b", Subject: "React frontend v2",
 		CreatedAt: time.Date(2026, 2, 15, 14, 30, 0, 0, time.UTC),
-		Tags: "#webapp #react", TotalInputTokens: 300000, TotalOutputTokens: 15000,
+		Tags:      "#webapp #react", TotalInputTokens: 300000, TotalOutputTokens: 15000,
 	}
 	if err := SaveSession(database, updated); err != nil {
 		t.Fatalf("SaveSession upsert: %v", err)

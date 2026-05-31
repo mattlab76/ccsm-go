@@ -16,8 +16,8 @@ import (
 	"github.com/mattlab76/ccsm-go/internal/ui/mainmenu"
 	"github.com/mattlab76/ccsm-go/internal/ui/newsession"
 	"github.com/mattlab76/ccsm-go/internal/ui/settings"
-	"github.com/mattlab76/ccsm-go/internal/ui/stats"
 	"github.com/mattlab76/ccsm-go/internal/ui/startup"
+	"github.com/mattlab76/ccsm-go/internal/ui/stats"
 	"github.com/mattlab76/ccsm-go/internal/ui/styles"
 )
 

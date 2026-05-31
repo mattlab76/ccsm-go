@@ -3,6 +3,7 @@
 //   - expired sessions whose JSONL transcript has been deleted at the
 //     Claude Code side
 //   - sessions whose working directory has been deleted locally
+//
 // Sessions the user has previously dismissed are skipped. If any remain,
 // this view is shown before the main menu so the user can purge or
 // dismiss them in one go.
@@ -14,8 +15,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/mattlab76/ccsm-go/internal/claude"
 	"github.com/mattlab76/ccsm-go/internal/db"
 	"github.com/mattlab76/ccsm-go/internal/i18n"

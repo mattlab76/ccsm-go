@@ -10,7 +10,7 @@ import (
 // TextInput is a reusable text input with cursor navigation.
 type TextInput struct {
 	Value       string
-	Pos         int  // cursor position (0 = before first char)
+	Pos         int // cursor position (0 = before first char)
 	Placeholder string
 }
 

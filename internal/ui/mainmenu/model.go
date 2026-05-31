@@ -44,16 +44,16 @@ func menuActions() []menuAction {
 // The cursor spans sessions (0..len(sessions)-1) and then menu items
 // (len(sessions)..len(sessions)+len(menuActions)-1).
 type Model struct {
-	db        *db.DB
-	sessions  []model.Session
-	rows      []components.TableRow
-	actions   []menuAction
-	width     int
-	height    int
-	cursor    int
-	err       error
-	totalCount int // all sessions in DB; cached at load so View() needn't query per repaint
-	usageSnap usage.Snapshot // populated async; zero-value until ready
+	db         *db.DB
+	sessions   []model.Session
+	rows       []components.TableRow
+	actions    []menuAction
+	width      int
+	height     int
+	cursor     int
+	err        error
+	totalCount int            // all sessions in DB; cached at load so View() needn't query per repaint
+	usageSnap  usage.Snapshot // populated async; zero-value until ready
 	usageReady bool
 }
 

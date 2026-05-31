@@ -91,17 +91,17 @@ type Snapshot struct {
 // rawLine is a partial decode of a JSONL message line. Only the fields we
 // actually need are listed — json.Unmarshal silently drops the rest.
 type rawLine struct {
-	Type       string `json:"type"`
-	Timestamp  string `json:"timestamp"`
-	SessionID  string `json:"sessionId"`
-	CWD        string `json:"cwd"`
-	IsSidechain bool  `json:"isSidechain"`
-	Message    struct {
+	Type        string `json:"type"`
+	Timestamp   string `json:"timestamp"`
+	SessionID   string `json:"sessionId"`
+	CWD         string `json:"cwd"`
+	IsSidechain bool   `json:"isSidechain"`
+	Message     struct {
 		Model string `json:"model"`
 		Usage struct {
-			InputTokens             int64 `json:"input_tokens"`
-			OutputTokens            int64 `json:"output_tokens"`
-			CacheReadInputTokens    int64 `json:"cache_read_input_tokens"`
+			InputTokens              int64 `json:"input_tokens"`
+			OutputTokens             int64 `json:"output_tokens"`
+			CacheReadInputTokens     int64 `json:"cache_read_input_tokens"`
 			CacheCreationInputTokens int64 `json:"cache_creation_input_tokens"`
 		} `json:"usage"`
 	} `json:"message"`

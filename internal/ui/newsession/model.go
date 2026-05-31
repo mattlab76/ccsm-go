@@ -60,9 +60,9 @@ type Model struct {
 	tagComplete   components.TagComplete
 
 	// Session data from hook
-	hookData    *hook.HookData
-	isUpdate    bool // true if session already exists in DB
-	recovered   bool // true if hookData was rebuilt from transcript
+	hookData        *hook.HookData
+	isUpdate        bool // true if session already exists in DB
+	recovered       bool // true if hookData was rebuilt from transcript
 	existingSession *model.Session
 
 	// Save state

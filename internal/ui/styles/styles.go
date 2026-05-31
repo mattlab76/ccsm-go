@@ -43,12 +43,12 @@ const (
 // returned string; this function continues that indent on lines 2–6
 // so the whole block lines up.
 //
-//	   ██████╗ ██████╗ ███████╗███╗   ███╗
-//	  ██╔════╝██╔════╝██╔════╝████╗ ████║
-//	  ██║     ██║     ███████╗██╔████╔██║   Title here
-//	  ██║     ██║     ╚════██║██║╚██╔╝██║   N session(s)
-//	  ╚██████╗╚██████╗███████║██║ ╚═╝ ██║
-//	   ╚═════╝ ╚═════╝╚══════╝╚═╝     ╚═╝
+//	 ██████╗ ██████╗ ███████╗███╗   ███╗
+//	██╔════╝██╔════╝██╔════╝████╗ ████║
+//	██║     ██║     ███████╗██╔████╔██║   Title here
+//	██║     ██║     ╚════██║██║╚██╔╝██║   N session(s)
+//	╚██████╗╚██████╗███████║██║ ╚═╝ ██║
+//	 ╚═════╝ ╚═════╝╚══════╝╚═╝     ╚═╝
 func RenderLogo(title string, count int) string {
 	countStr := Dim.Render(formatCount(count))
 	const gap = "   "

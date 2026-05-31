@@ -19,7 +19,12 @@ func ListSessions(db *DB, limit int) ([]model.Session, error) {
 		query += " LIMIT ?"
 	}
 
-	var rows_ interface{ Next() bool; Scan(...any) error; Err() error; Close() error }
+	var rows_ interface {
+		Next() bool
+		Scan(...any) error
+		Err() error
+		Close() error
+	}
 	var err error
 	if limit > 0 {
 		rows_, err = db.Query(query, limit)

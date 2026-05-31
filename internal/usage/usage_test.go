@@ -121,9 +121,9 @@ func TestPricingFor(t *testing.T) {
 
 func TestProgressBar(t *testing.T) {
 	tests := []struct {
-		name  string
-		pct   float64
-		width int
+		name       string
+		pct        float64
+		width      int
 		wantPrefix string
 		wantLen    int // visible width (not byte count)
 	}{

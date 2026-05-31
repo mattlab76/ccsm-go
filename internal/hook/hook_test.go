@@ -15,13 +15,13 @@ func TestParseTokens(t *testing.T) {
 		{"100/50", 100, 50},
 		{"0/0", 0, 0},
 		{"1234567/890", 1234567, 890},
-		{" 12 / 34 ", 12, 34},       // whitespace tolerated
-		{"", 0, 0},                 // missing separator → zeros
-		{"junk", 0, 0},             // no slash → zeros
-		{"100/", 100, 0},           // trailing slash
-		{"/50", 0, 50},             // leading slash
-		{"abc/def", 0, 0},          // non-numeric → zeros
-		{"100/50/extra", 100, 50},  // SplitN(2) keeps the rest with out — but unparseable
+		{" 12 / 34 ", 12, 34},     // whitespace tolerated
+		{"", 0, 0},                // missing separator → zeros
+		{"junk", 0, 0},            // no slash → zeros
+		{"100/", 100, 0},          // trailing slash
+		{"/50", 0, 50},            // leading slash
+		{"abc/def", 0, 0},         // non-numeric → zeros
+		{"100/50/extra", 100, 50}, // SplitN(2) keeps the rest with out — but unparseable
 	}
 	for _, tt := range tests {
 		t.Run(tt.in, func(t *testing.T) {

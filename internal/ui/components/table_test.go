@@ -68,7 +68,7 @@ func TestRenderTable_Compact(t *testing.T) {
 	rows := []TableRow{
 		{Num: 1, Session: model.Session{
 			SID: "test-1", CWD: "/tmp/test", Subject: "Test session",
-			CreatedAt: time.Date(2026, 3, 24, 10, 30, 0, 0, time.UTC),
+			CreatedAt:        time.Date(2026, 3, 24, 10, 30, 0, 0, time.UTC),
 			TotalInputTokens: 1500, TotalOutputTokens: 200,
 		}, Status: StatusOK},
 	}
@@ -85,7 +85,7 @@ func TestRenderTable_Full(t *testing.T) {
 	rows := []TableRow{
 		{Num: 1, Session: model.Session{
 			SID: "test-1", CWD: "/tmp/test", Subject: "Full table test",
-			CreatedAt: time.Date(2026, 3, 24, 10, 30, 0, 0, time.UTC),
+			CreatedAt:        time.Date(2026, 3, 24, 10, 30, 0, 0, time.UTC),
 			TotalInputTokens: 1000000, TotalOutputTokens: 5000,
 			LastInputTokens: 500000, LastOutputTokens: 2500,
 		}, Status: StatusOK},

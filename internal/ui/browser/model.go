@@ -42,7 +42,7 @@ type Model struct {
 	width    int
 	height   int
 	mode     mode
-	cursor   int    // 0-based index of selected row
+	cursor   int // 0-based index of selected row
 	ti       components.TextInput
 	search   string // active search query
 	message  string

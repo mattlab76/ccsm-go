@@ -264,7 +264,7 @@ func TestTextInput_Unicode(t *testing.T) {
 	if ti.Pos != 4 {
 		t.Errorf("unicode: Pos = %d, want 4", ti.Pos)
 	}
-	ti.HandleKey("left")     // Pos 3 (before 'r')
+	ti.HandleKey("left")      // Pos 3 (before 'r')
 	ti.HandleKey("backspace") // deletes 'e' at pos 2
 	if ti.Value != "übr" {
 		t.Errorf("unicode backspace: Value = %q, want %q", ti.Value, "übr")
