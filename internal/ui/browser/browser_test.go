@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/mattlab76/ccsm-go/internal/db"
 	"github.com/mattlab76/ccsm-go/internal/model"
+	"github.com/mattlab76/ccsm-go/internal/ui/components"
 )
 
 func setupBrowser(t *testing.T) Model {
@@ -244,5 +245,57 @@ func TestBrowser_SortModeString(t *testing.T) {
 	}
 	if sortByTokens.String() == "" {
 		t.Error("sortByTokens.String() should not be empty")
+	}
+}
+
+// TestBrowser_SortKeepsStatusWithSession is a regression test: sorting used
+// to reorder m.sessions but reassign m.rows[i].Session without moving the
+// row's Status, so [!]/[?] markers ended up on the wrong rows after a
+// name/token sort. After the fix, each row's Status must stay paired with
+// its session, and m.sessions must stay aligned with the displayed rows.
+func TestBrowser_SortKeepsStatusWithSession(t *testing.T) {
+	mk := func(sid, subject string, tok int64, st components.SessionStatus) components.TableRow {
+		return components.TableRow{
+			Session: model.Session{SID: sid, Subject: subject, TotalInputTokens: tok,
+				CreatedAt: time.Date(2026, 3, 20, 10, 0, 0, 0, time.UTC)},
+			Status: st,
+		}
+	}
+	m := Model{
+		rows: []components.TableRow{
+			mk("s1", "Zebra", 100, components.StatusExpired),
+			mk("s2", "Alpha", 300, components.StatusOK),
+			mk("s3", "Mango", 200, components.StatusMissingDir),
+		},
+	}
+	m.sessions = make([]model.Session, len(m.rows))
+	want := map[string]components.SessionStatus{}
+	for i, r := range m.rows {
+		m.sessions[i] = r.Session
+		want[r.Session.SID] = r.Status
+	}
+
+	m.sortMode = sortByName
+	m.applySortOrder()
+
+	// Rows now in alphabetical order: Alpha, Mango, Zebra.
+	gotOrder := []string{m.rows[0].Session.Subject, m.rows[1].Session.Subject, m.rows[2].Session.Subject}
+	wantOrder := []string{"Alpha", "Mango", "Zebra"}
+	for i := range wantOrder {
+		if gotOrder[i] != wantOrder[i] {
+			t.Fatalf("sorted order = %v, want %v", gotOrder, wantOrder)
+		}
+	}
+	// Each row's status must still match its own session, and m.sessions
+	// must mirror the rows.
+	for i, r := range m.rows {
+		if r.Status != want[r.Session.SID] {
+			t.Errorf("row %d (%s): status = %v, want %v",
+				i, r.Session.SID, r.Status, want[r.Session.SID])
+		}
+		if m.sessions[i].SID != r.Session.SID {
+			t.Errorf("row %d: m.sessions SID = %s, row SID = %s (out of sync)",
+				i, m.sessions[i].SID, r.Session.SID)
+		}
 	}
 }

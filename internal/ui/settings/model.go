@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/mattlab76/ccsm-go/internal/db"
@@ -302,10 +303,17 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.input = ""
 		case "backspace":
 			if len(m.input) > 0 {
-				m.input = m.input[:len(m.input)-1]
+				// Trim one whole rune, not one byte, so multi-byte
+				// characters (umlauts etc.) delete cleanly.
+				r := []rune(m.input)
+				m.input = string(r[:len(r)-1])
 			}
+		case "space":
+			m.input += " "
 		default:
-			if len(key) == 1 {
+			// Accept any single typed rune (incl. umlauts); named keys
+			// arrive as multi-rune strings and are ignored.
+			if utf8.RuneCountInString(key) == 1 {
 				m.input += key
 			}
 		}

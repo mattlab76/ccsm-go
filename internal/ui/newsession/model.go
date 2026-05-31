@@ -503,23 +503,29 @@ func (m Model) doSave() (Model, tea.Cmd) {
 	// `claude --resume` will actually look in, so resume keeps working.
 	resolvedCWD := claude.ResolveSessionCWD(h.SessionID, h.CWD)
 
-	s := &model.Session{
-		SID:              h.SessionID,
-		CWD:              resolvedCWD,
-		Subject:          m.chosenSubject,
-		CreatedAt:        now,
-		Tags:             tags,
-		LastInputTokens:  h.InputTokens,
-		LastOutputTokens: h.OutputTokens,
-	}
-
-	// Accumulate tokens for existing sessions.
+	// Reconcile token counts. The hook (and transcript recovery) report the
+	// sum over the WHOLE transcript, so on a resume their figure already
+	// includes every earlier run — it IS the session's cumulative total and
+	// must be stored as-is, not added onto the previous total (which
+	// double-counted on every resume). "Last" is this run's delta; lifetime
+	// grows only by that delta.
+	var prevIn, prevOut int64
 	if m.isUpdate && m.existingSession != nil {
-		s.TotalInputTokens = m.existingSession.TotalInputTokens + h.InputTokens
-		s.TotalOutputTokens = m.existingSession.TotalOutputTokens + h.OutputTokens
-	} else {
-		s.TotalInputTokens = h.InputTokens
-		s.TotalOutputTokens = h.OutputTokens
+		prevIn = m.existingSession.TotalInputTokens
+		prevOut = m.existingSession.TotalOutputTokens
+	}
+	totalIn, totalOut, lastIn, lastOut := tokenTotals(h.InputTokens, h.OutputTokens, prevIn, prevOut)
+
+	s := &model.Session{
+		SID:               h.SessionID,
+		CWD:               resolvedCWD,
+		Subject:           m.chosenSubject,
+		CreatedAt:         now,
+		Tags:              tags,
+		TotalInputTokens:  totalIn,
+		TotalOutputTokens: totalOut,
+		LastInputTokens:   lastIn,
+		LastOutputTokens:  lastOut,
 	}
 
 	if err := db.SaveSession(m.db, s); err != nil {
@@ -528,8 +534,9 @@ func (m Model) doSave() (Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Add to lifetime tokens.
-	db.AddLifetimeTokens(m.db, h.InputTokens, h.OutputTokens)
+	// Lifetime grows only by this run's delta — never the whole transcript
+	// again, which previously inflated the counter on every resume.
+	db.AddLifetimeTokens(m.db, lastIn, lastOut)
 
 	// Log action.
 	if m.isUpdate {
@@ -663,6 +670,30 @@ func (m Model) renderSaveBox() string {
 	b.WriteString("  Tokens in:  " + fmtIn + "\n")
 	b.WriteString("  Tokens out: " + fmtOut + "\n\n")
 	return b.String()
+}
+
+// tokenTotals reconciles the whole-transcript token figures from the hook
+// (or transcript recovery) with the totals already stored for the session.
+//
+// The hook sums usage over the ENTIRE transcript, so for a resumed session
+// its figure already includes every earlier run. That whole-transcript sum
+// therefore is the session's cumulative total: store it directly as Total,
+// derive Last as this run's delta. prevTotal is 0 for a brand-new session
+// (Last then equals Total). Deltas are clamped to >= 0 so a shorter or
+// recovered transcript — or totals inflated by the old double-counting bug —
+// can't yield negative counts; storing the fresh whole-transcript figure as
+// Total also self-heals any earlier inflation on the next save.
+func tokenTotals(transcriptIn, transcriptOut, prevTotalIn, prevTotalOut int64) (totalIn, totalOut, lastIn, lastOut int64) {
+	totalIn, totalOut = transcriptIn, transcriptOut
+	lastIn = transcriptIn - prevTotalIn
+	lastOut = transcriptOut - prevTotalOut
+	if lastIn < 0 {
+		lastIn = 0
+	}
+	if lastOut < 0 {
+		lastOut = 0
+	}
+	return
 }
 
 func formatTokens(n int64) string {

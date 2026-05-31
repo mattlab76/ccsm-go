@@ -2,6 +2,7 @@ package components
 
 import (
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/mattlab76/ccsm-go/internal/ui/styles"
 )
@@ -77,17 +78,21 @@ func (t *TextInput) HandleKey(key string) bool {
 		t.Value = string(append(runes[:newPos], runes[t.Pos:]...))
 		t.Pos = newPos
 	default:
-		// Insert character.
-		if len(key) == 1 {
-			runes = insertRune(runes, t.Pos, rune(key[0]))
-			t.Pos++
-			t.Value = string(runes)
-		} else if key == "space" {
+		// Insert a typed character. A typed character arrives as exactly
+		// one rune — including multi-byte runes like umlauts (ä, ö, ü) and
+		// € — so measure runes, not bytes. The old len(key)==1 byte check
+		// silently dropped every non-ASCII character.
+		if key == "space" {
 			runes = insertRune(runes, t.Pos, ' ')
 			t.Pos++
 			t.Value = string(runes)
+		} else if utf8.RuneCountInString(key) == 1 {
+			r := []rune(key)[0]
+			runes = insertRune(runes, t.Pos, r)
+			t.Pos++
+			t.Value = string(runes)
 		} else {
-			return false // Key not handled.
+			return false // Named key (enter, tab, up, ...) — not handled.
 		}
 	}
 	return true

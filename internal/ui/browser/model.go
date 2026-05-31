@@ -112,22 +112,31 @@ func (m *Model) loadSessions(query string) {
 }
 
 func (m *Model) applySortOrder() {
+	// Sort the rows, not m.sessions, so each row's Status ([!]/[?]) and
+	// other fields travel with its session. Sorting the two slices
+	// independently used to leave status markers attached to the wrong
+	// rows after sorting by name or tokens.
 	switch m.sortMode {
 	case sortByDate:
-		// Already sorted by DB query (newest first), no action needed.
+		// Newest first — re-sort explicitly so cycling back from another
+		// order restores date order rather than keeping the last sort.
+		sort.SliceStable(m.rows, func(i, j int) bool {
+			return m.rows[i].Session.CreatedAt.After(m.rows[j].Session.CreatedAt)
+		})
 	case sortByName:
-		sort.Slice(m.sessions, func(i, j int) bool {
-			return strings.ToLower(m.sessions[i].Subject) < strings.ToLower(m.sessions[j].Subject)
+		sort.SliceStable(m.rows, func(i, j int) bool {
+			return strings.ToLower(m.rows[i].Session.Subject) < strings.ToLower(m.rows[j].Session.Subject)
 		})
 	case sortByTokens:
-		sort.Slice(m.sessions, func(i, j int) bool {
-			return m.sessions[i].TotalInputTokens > m.sessions[j].TotalInputTokens
+		sort.SliceStable(m.rows, func(i, j int) bool {
+			return m.rows[i].Session.TotalInputTokens > m.rows[j].Session.TotalInputTokens
 		})
 	}
-	// Rebuild rows after sorting.
-	for i, s := range m.sessions {
+	// Renumber and keep m.sessions aligned with the sorted rows so that
+	// cursor-based lookups (resume, preview) hit the displayed session.
+	for i := range m.rows {
 		m.rows[i].Num = i + 1
-		m.rows[i].Session = s
+		m.sessions[i] = m.rows[i].Session
 	}
 }
 

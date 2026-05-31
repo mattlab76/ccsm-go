@@ -269,3 +269,100 @@ func TestSessionFinished_AutoSubjectFallsBackToDirName(t *testing.T) {
 		t.Errorf("autoSubject should contain dir name, got %q", m.autoSubject)
 	}
 }
+
+// ─── Token reconciliation (#3) ──────────────────────────────────────
+
+func TestTokenTotals(t *testing.T) {
+	cases := []struct {
+		name                                   string
+		tin, tout, pin, pout                   int64
+		wTotalIn, wTotalOut, wLastIn, wLastOut int64
+	}{
+		{"fresh session: last==total", 300, 400, 0, 0, 300, 400, 300, 400},
+		{"resume stores cumulative, last is delta", 150, 260, 100, 200, 150, 260, 50, 60},
+		{"shorter transcript clamps last to zero", 80, 90, 100, 200, 80, 90, 0, 0},
+		{"prior inflation self-heals on total", 120, 130, 999, 999, 120, 130, 0, 0},
+	}
+	for _, c := range cases {
+		ti, to, li, lo := tokenTotals(c.tin, c.tout, c.pin, c.pout)
+		if ti != c.wTotalIn || to != c.wTotalOut || li != c.wLastIn || lo != c.wLastOut {
+			t.Errorf("%s: got total %d/%d last %d/%d; want total %d/%d last %d/%d",
+				c.name, ti, to, li, lo, c.wTotalIn, c.wTotalOut, c.wLastIn, c.wLastOut)
+		}
+	}
+}
+
+// TestDoSave_ResumeDoesNotDoubleCount drives the full save path on an update.
+// The hook reports the WHOLE transcript (prior 100/200 + this run 50/60 =
+// 150/260). The stored Total must equal the whole-transcript figure (not be
+// added on top of the prior total), Last must be this run's delta, and the
+// lifetime counter must grow only by that delta.
+func TestDoSave_ResumeDoesNotDoubleCount(t *testing.T) {
+	d, _ := setup(t)
+	existing := &model.Session{
+		SID: "sid", CWD: "/work/repo", Subject: "subj",
+		CreatedAt:        time.Now().Add(-time.Hour),
+		TotalInputTokens: 100, TotalOutputTokens: 200,
+		LastInputTokens: 100, LastOutputTokens: 200,
+	}
+	if err := db.SaveSession(d, existing); err != nil {
+		t.Fatal(err)
+	}
+
+	m := New(d)
+	m.isUpdate = true
+	m.existingSession = existing
+	m.chosenSubject = "subj"
+	m.hookData = &hook.HookData{
+		SessionID: "sid", CWD: "/work/repo",
+		InputTokens: 150, OutputTokens: 260,
+	}
+
+	m, _ = m.doSave()
+
+	got, err := db.GetSession(d, "sid")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.TotalInputTokens != 150 || got.TotalOutputTokens != 260 {
+		t.Errorf("Total = %d/%d, want 150/260 (no double-count)",
+			got.TotalInputTokens, got.TotalOutputTokens)
+	}
+	if got.LastInputTokens != 50 || got.LastOutputTokens != 60 {
+		t.Errorf("Last = %d/%d, want 50/60 (this run's delta)",
+			got.LastInputTokens, got.LastOutputTokens)
+	}
+	in, out, _ := db.GetLifetimeTokens(d)
+	if in != 50 || out != 60 {
+		t.Errorf("lifetime = %d/%d, want 50/60 (delta only)", in, out)
+	}
+}
+
+// TestDoSave_FreshSessionStoresWholeTranscript checks the new-session path:
+// no prior totals, so Total and Last both equal the whole-transcript figure
+// and lifetime grows by the full amount.
+func TestDoSave_FreshSessionStoresWholeTranscript(t *testing.T) {
+	d, _ := setup(t)
+	m := New(d)
+	m.isUpdate = false
+	m.chosenSubject = "brand new"
+	m.hookData = &hook.HookData{
+		SessionID: "fresh", CWD: "/work/new",
+		InputTokens: 300, OutputTokens: 400,
+	}
+
+	m, _ = m.doSave()
+
+	got, err := db.GetSession(d, "fresh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.TotalInputTokens != 300 || got.LastInputTokens != 300 {
+		t.Errorf("fresh: total in=%d last in=%d, want 300/300",
+			got.TotalInputTokens, got.LastInputTokens)
+	}
+	in, out, _ := db.GetLifetimeTokens(d)
+	if in != 300 || out != 400 {
+		t.Errorf("lifetime = %d/%d, want 300/400", in, out)
+	}
+}

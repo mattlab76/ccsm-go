@@ -160,7 +160,15 @@ func migrateConf(database *DB, path string) bool {
 	}
 	defer f.Close()
 
-	s := model.DefaultSettings()
+	// Start from whatever is already configured so we only overwrite the
+	// three keys the bash conf actually carries (cleanup / log / lang).
+	// Importing must not reset currency, exchange rate or plan settings —
+	// those exist only in the Go version and aren't in the bash conf.
+	s, err := GetSettings(database)
+	if err != nil {
+		def := model.DefaultSettings()
+		s = &def
+	}
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -191,7 +199,7 @@ func migrateConf(database *DB, path string) bool {
 			s.Lang = value
 		}
 	}
-	SaveSettings(database, &s)
+	SaveSettings(database, s)
 	return true
 }
 

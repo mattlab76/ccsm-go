@@ -228,6 +228,36 @@ func TestTextInput_BoundsCheck(t *testing.T) {
 	}
 }
 
+func TestTextInput_TypeMultiByteRunes(t *testing.T) {
+	// Regression: HandleKey used to gate insertion on len(key)==1 (bytes),
+	// which silently dropped every multi-byte rune — umlauts, accents, €.
+	ti := NewTextInput("")
+	for _, k := range []string{"G", "r", "ö", "ß", "e"} {
+		if !ti.HandleKey(k) {
+			t.Errorf("HandleKey(%q) returned false, key not handled", k)
+		}
+	}
+	if ti.Value != "Größe" {
+		t.Errorf("Value = %q, want %q", ti.Value, "Größe")
+	}
+	if ti.Pos != 5 {
+		t.Errorf("Pos = %d, want 5", ti.Pos)
+	}
+}
+
+func TestTextInput_NamedKeysNotInserted(t *testing.T) {
+	// Named keys arrive as multi-rune strings and must not be inserted.
+	ti := NewTextInput("")
+	for _, k := range []string{"enter", "tab", "up", "ctrl+x"} {
+		if ti.HandleKey(k) {
+			t.Errorf("HandleKey(%q) reported handled; should be ignored", k)
+		}
+	}
+	if ti.Value != "" {
+		t.Errorf("Value = %q, want empty", ti.Value)
+	}
+}
+
 func TestTextInput_Unicode(t *testing.T) {
 	ti := NewTextInput("")
 	ti.SetValue("über")
