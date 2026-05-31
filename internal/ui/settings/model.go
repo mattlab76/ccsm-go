@@ -372,17 +372,17 @@ func (m Model) View() string {
 	// Current values, with cursor marker on the active field.
 	b.WriteString(settingRow(m.cursor == 0 && m.state == stateMenu, "1",
 		i18n.T("settings_lang"),
-		i18n.T("settings_lang_current"),
+		i18n.T("settings_current"),
 		m.settings.Lang))
 
 	b.WriteString(settingRow(m.cursor == 1 && m.state == stateMenu, "2",
 		i18n.T("settings_cleanup"),
-		i18n.T("settings_cleanup_current"),
+		i18n.T("settings_current"),
 		fmt.Sprintf("%d", m.settings.CleanupDays)))
 
 	b.WriteString(settingRow(m.cursor == 2 && m.state == stateMenu, "3",
 		i18n.T("settings_log_days"),
-		i18n.T("settings_cleanup_current"),
+		i18n.T("settings_current"),
 		fmt.Sprintf("%d", m.settings.LogDays)))
 
 	currency := m.settings.Currency
@@ -391,7 +391,7 @@ func (m Model) View() string {
 	}
 	b.WriteString(settingRow(m.cursor == 3 && m.state == stateMenu, "4",
 		i18n.T("settings_currency"),
-		i18n.T("settings_lang_current"),
+		i18n.T("settings_current"),
 		currency))
 
 	rate := m.settings.ExchangeRate
@@ -401,7 +401,7 @@ func (m Model) View() string {
 	}
 	b.WriteString(settingRow(m.cursor == 4 && m.state == stateMenu, "5",
 		i18n.T("settings_rate"),
-		i18n.T("settings_lang_current"),
+		i18n.T("settings_current"),
 		rateVal))
 
 	planName := m.settings.PlanName
@@ -410,7 +410,7 @@ func (m Model) View() string {
 	}
 	b.WriteString(settingRow(m.cursor == 5 && m.state == stateMenu, "6",
 		i18n.T("settings_plan_name"),
-		i18n.T("settings_lang_current"),
+		i18n.T("settings_current"),
 		planName))
 
 	planPrice := "(not set)"
@@ -419,7 +419,7 @@ func (m Model) View() string {
 	}
 	b.WriteString(settingRow(m.cursor == 6 && m.state == stateMenu, "7",
 		i18n.T("settings_plan_price"),
-		i18n.T("settings_lang_current"),
+		i18n.T("settings_current"),
 		planPrice))
 
 	b.WriteString("\n")

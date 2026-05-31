@@ -182,11 +182,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.startupView, cmd = m.startupView.Update(msg)
 		return m, cmd
-	default:
-		// Stub views: q returns to main menu.
-		if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.String() == "q" {
-			return m.handleChildSwitch(ViewMainMenu)
-		}
 	}
 
 	return m, nil
@@ -321,7 +316,7 @@ func (m Model) View() string {
 		hints = components.StatusBarItems("↑↓", "scroll", "q", "back")
 	case ViewSettings:
 		content = m.settingsView.View()
-		hints = components.StatusBarItems("1-3", "edit", "q", "back")
+		hints = components.StatusBarItems("1-7", "edit", "q", "back")
 	case ViewStartupCheck:
 		content = m.startupView.View()
 		hints = components.StatusBarItems("↑↓", "nav", "Enter", "activate", "p", "purge", "d", "dismiss", "s/Esc", "skip")

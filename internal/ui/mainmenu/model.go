@@ -52,6 +52,7 @@ type Model struct {
 	height    int
 	cursor    int
 	err       error
+	totalCount int // all sessions in DB; cached at load so View() needn't query per repaint
 	usageSnap usage.Snapshot // populated async; zero-value until ready
 	usageReady bool
 }
@@ -79,6 +80,11 @@ func (m *Model) loadSessions() {
 			Session: s,
 			Status:  components.StatusOK,
 		}
+	}
+	// Cache the full count once; the menu can't gain/lose sessions while
+	// it's on screen, so re-querying it on every repaint was wasteful.
+	if n, err := db.CountSessions(m.db); err == nil {
+		m.totalCount = n
 	}
 }
 
@@ -198,15 +204,11 @@ func (m Model) View() string {
 		innerW = 56
 	}
 
-	// Count all sessions for header display.
-	allSessions, _ := db.ListSessions(m.db, 0)
-	totalCount := len(allSessions)
-
-	// Logo + title
+	// Logo + title (count cached at load — no per-repaint query).
 	b.WriteString("\n")
 	b.WriteString("  " + styles.RenderLogo(
 		fmt.Sprintf("%s v%s", i18n.T("title"), model.Version),
-		totalCount,
+		m.totalCount,
 	))
 	b.WriteString("\n\n")
 
