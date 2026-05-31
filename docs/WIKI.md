@@ -62,7 +62,7 @@ ein paar Claude-Sessions sieht der Hauptbildschirm so aus:
 ```
    ██████╗ ██████╗ ███████╗███╗   ███╗
   ██╔════╝██╔════╝██╔════╝████╗ ████║
-  ██║     ██║     ███████╗██╔████╔██║   Claude Code Session Manager v2.2.1
+  ██║     ██║     ███████╗██╔████╔██║   Claude Code Session Manager v2.2.4
   ██║     ██║     ╚════██║██║╚██╔╝██║   11 sessions
   ╚██████╗╚██████╗███████║██║ ╚═╝ ██║
    ╚═════╝ ╚═════╝╚══════╝╚═╝     ╚═╝
