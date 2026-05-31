@@ -99,6 +99,18 @@ func TestDetectLang(t *testing.T) {
 	}
 }
 
+func TestStatsCLIKeysDefined(t *testing.T) {
+	// Emitted by `ccsm stats` (cmd/ccsm/main.go). A missing definition makes
+	// T() return the raw key, so `ccsm stats` would print "stats_input:"
+	// instead of a label — the regression this guards against.
+	SetLang("en")
+	for _, key := range []string{"stats_active", "stats_lifetime", "stats_input", "stats_output"} {
+		if T(key) == key {
+			t.Errorf("key %q is undefined — `ccsm stats` would render the raw key", key)
+		}
+	}
+}
+
 func TestAllKeysConsistent(t *testing.T) {
 	// Every EN key should exist in DE.
 	for key := range langEN {

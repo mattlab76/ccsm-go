@@ -107,38 +107,6 @@ func FindSessionDataForDir(dir string) (*HookData, error) {
 	return nil, fmt.Errorf("no hook data found for %s", dir)
 }
 
-// FindLatestSessionData finds the most recently modified temp file.
-func FindLatestSessionData() (*HookData, error) {
-	entries, err := os.ReadDir(tmpDir)
-	if err != nil {
-		return nil, err
-	}
-
-	var newest os.DirEntry
-	var newestTime time.Time
-	for _, e := range entries {
-		if !strings.HasPrefix(e.Name(), "session-") || !strings.HasSuffix(e.Name(), ".json") {
-			continue
-		}
-		info, err := e.Info()
-		if err != nil {
-			continue
-		}
-		if newest == nil || info.ModTime().After(newestTime) {
-			newest = e
-			newestTime = info.ModTime()
-		}
-	}
-	if newest == nil {
-		return nil, fmt.Errorf("no session data files found")
-	}
-
-	// Extract SID from filename: session-{sid}.json
-	name := newest.Name()
-	sid := strings.TrimPrefix(strings.TrimSuffix(name, ".json"), "session-")
-	return ReadSessionData(sid)
-}
-
 // CleanupTempFile removes the temp file for a given session.
 func CleanupTempFile(sid string) {
 	path := filepath.Join(tmpDir, fmt.Sprintf("session-%s.json", sid))

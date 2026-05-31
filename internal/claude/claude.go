@@ -56,21 +56,6 @@ func IsInstalled() bool {
 	return err == nil
 }
 
-// ValidateSessions checks a list of sessions for expired (JSONL missing) and missing dir.
-type ValidationResult struct {
-	Expired    []string // SIDs where JSONL is gone
-	MissingDir []string // SIDs where CWD doesn't exist
-}
-
-// ValidateSessions checks sessions for validity.
-func ValidateSessions(sessions []struct{ SID, CWD string }) ValidationResult {
-	var result ValidationResult
-	for _, s := range sessions {
-		if !IsSessionValid(s.SID) {
-			result.Expired = append(result.Expired, s.SID)
-		} else if _, err := os.Stat(s.CWD); os.IsNotExist(err) {
-			result.MissingDir = append(result.MissingDir, s.SID)
-		}
-	}
-	return result
-}
+// Session validity is checked per-session by IsSessionValid; the views
+// that need expired/missing-dir status compute it inline alongside their
+// own dir checks.
